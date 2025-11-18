@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opticalSystem><beamParameters w0_um="2.135" z0_mm="0" lambda_nm="671" M2="1" n="1" plotRangeZ_mm="1000"/><elements><element type="lens" position_mm="10"><property f_mm="10"/></element><element type="lens" position_mm="100"><property f_mm="10"/></element><element type="lens" position_mm="235"><property f_mm="125"/></element></elements></opticalSystem>
