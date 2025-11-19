@@ -17,12 +17,18 @@ def minus_90_conv(angle_):
 def plus_90_conv(angle_):
     return angle_ + 90
 
+# Displacement and label settings
+x_displacement = 0
+y_displacement = 0
+label_position = 'top'
+label_color = 'dodgerblue'
+edge_width = 7
 
 # Create the optical table
 table = pyopt.OpticalTable(60, 92, size_factor=20, show_edge=True, show_grid=True, grid_spacing=1)
 descaling_factor = 60/92
 
-edge_width = 7
+
 
 x_displacement_2 = 5
 y_displacement_2 = 4
@@ -72,14 +78,19 @@ table.ax.plot([x1_13, x2_13], [y1_13, y2_13], color='purple', linewidth=edge_wid
 x1_14, x2_14, y1_14, y2_14 = table.angled_line(x=x_conv(38 + x_displacement_2), y=y_conv(80.5 + y_displacement_2), size=21/descaling_factor, angle=0, show=False, get_coords=True)
 table.ax.plot([x1_14, x2_14], [y1_14, y2_14], color='purple', linewidth=edge_width_2, linestyle=linestyle, alpha=transparency)
 
+# Draw other features
+center = table.generic_circle(x=x_conv(29), y=y_conv(40), size=0.5, colour='gold', fill=True, fillcolour='gold', label='center',
+                                        label_pos=label_position, labelpad=0.5, textcolour=label_color)
+lower_hole = table.generic_circle(x=x_conv(7), y=y_conv(11), size=0.5, colour='red', fill=False, fillcolour='k', label='hole',
+                                        label_pos='bottom', labelpad=0.35, textcolour=label_color)
+upper_hole = table.generic_circle(x=x_conv(7), y=y_conv(47), size=0.5, colour='red', fill=False, fillcolour='k', label='hole',
+                                        label_pos='bottom', labelpad=0.35, textcolour=label_color)
+ion_pump_1 = table.box(x=x_conv(29), y=y_conv(32.5), size_x=6.5, size_y=12.5, angle=-45, linestyle='-', standalone=True,
+                                        label='ion pump', label_pos=label_position, labelpad=0, textcolour=label_color)
+ion_pump_2 = table.box(x=x_conv(22), y=y_conv(25.5), size_x=2, size_y=7.5, angle=-45, linestyle='-', standalone=True,
+                                        label='', label_pos=label_position, labelpad=0, textcolour=label_color)
 
 df = pd.read_csv('OpticsSetupTable_v3.csv')
-
-x_displacement = 0
-y_displacement = 0
-
-label_position = 'top'
-label_color = 'dodgerblue'
 optical_elements = {}
 
 
@@ -100,12 +111,6 @@ Cs_MOT_1_Path = []
 Cs_MOT_2 = pyopt.LaserBeam(colour='green', width=1, style='-')
 Cs_MOT_2_Path = []
 Cs_MOT_1_Path.append(table.point_source(x=x_conv(7 + x_displacement), y=y_conv(11 + y_displacement), label='Cs MOT', label_pos=label_position, labelpad=1, textcolour=label_color, fontsize=laser_label_font_size))
-
-Li_Repump_1 = pyopt.LaserBeam(colour='lime', width=1, style='-')
-Li_Repump_1_Path = []
-Li_Repump_2 = pyopt.LaserBeam(colour='lime', width=1, style='-')
-Li_Repump_2_Path = []
-Li_Repump_1_Path.append(table.point_source(x=x_conv(7 + x_displacement), y=y_conv(11 + y_displacement), label='Li Repump', label_pos=label_position, labelpad=2.6, textcolour=label_color, fontsize=laser_label_font_size))
 
 Cs_V_Imaging_1 = pyopt.LaserBeam(colour='orchid', width=1, style='-')
 Cs_V_Imaging_1_Path = []
@@ -231,174 +236,31 @@ for _, row in df.iterrows():
             print(f"Skipping unknown element: {label + ' ' + type_}")
 
 
-center = table.generic_circle(x=x_conv(29), y=y_conv(40), size=0.5, colour='gold', fill=True, fillcolour='gold', label='center',
-                                        label_pos=label_position, labelpad=0.5, textcolour=label_color)
-lower_hole = table.generic_circle(x=x_conv(7), y=y_conv(11), size=0.5, colour='red', fill=False, fillcolour='k', label='hole',
-                                        label_pos='bottom', labelpad=0.35, textcolour=label_color)
-upper_hole = table.generic_circle(x=x_conv(7), y=y_conv(47), size=0.5, colour='red', fill=False, fillcolour='k', label='hole',
-                                        label_pos='bottom', labelpad=0.35, textcolour=label_color)
-ion_pump_1 = table.box(x=x_conv(29), y=y_conv(32.5), size_x=6.5, size_y=12.5, angle=-45, linestyle='-', standalone=True,
-                                        label='ion pump', label_pos=label_position, labelpad=0, textcolour=label_color)
-ion_pump_2 = table.box(x=x_conv(22), y=y_conv(25.5), size_x=2, size_y=7.5, angle=-45, linestyle='-', standalone=True,
-                                        label='', label_pos=label_position, labelpad=0, textcolour=label_color)
 
-#
-# Li_MOT_1_Path.append(optical_elements[228])
-# Li_MOT_1_Path.append(optical_elements[222])
-# Li_MOT_1_Path.append(optical_elements[221])
-# Li_MOT_1_Path.append(optical_elements[220])
-# Li_MOT_1_Path.append(optical_elements[256])
-# Li_MOT_1_Path.append(optical_elements[211])
-# Li_MOT_1_Path.append(optical_elements[210])
-# Li_MOT_1_Path.append(optical_elements[210])
-# Li_MOT_1_Path.append(optical_elements[215])
-# Li_MOT_1_Path.append(optical_elements[216])
-# Li_MOT_1_Path.append(optical_elements[212])
-# Li_MOT_1_Path.append(optical_elements[217])
-# Li_MOT_1_Path.append(optical_elements[230])
-# Li_MOT_1_Path.append(optical_elements[300])
-# Li_MOT_1.draw(table, Li_MOT_1_Path)
-#
-# Li_MOT_2_Path.append(optical_elements[212])
-# Li_MOT_2_Path.append(optical_elements[293])
-# # Li_MOT_2.draw(table, Li_MOT_2_Path)
-#
-# # Cs_MOT_1_Path.append(optical_elements[228])
-# Cs_MOT_1_Path.append(optical_elements[219])
-# Cs_MOT_1_Path.append(optical_elements[218])
-# Cs_MOT_1_Path.append(optical_elements[199])
-# Cs_MOT_1_Path.append(optical_elements[198])
-# Cs_MOT_1_Path.append(optical_elements[197])
-# Cs_MOT_1_Path.append(optical_elements[196])
-# # Cs_MOT_1_Path.append(optical_elements[209])
-# Cs_MOT_1_Path.append(pyopt.OpticalElement(x_conv(14), y_conv(32), 't', angle=0, element_type='point_source'))
-# # Cs_MOT_1_Path.append(optical_elements[208])
-# # Cs_MOT_1_Path.append(optical_elements[206])
-# Cs_MOT_1_Path.append(pyopt.OpticalElement(x_conv(14), y_conv(28.05), 't', angle=0, element_type='point_source'))
-# # Cs_MOT_1_Path.append(optical_elements[207])
-# # Cs_MOT_1_Path.append(optical_elements[212])
-# # Cs_MOT_1_Path.append(optical_elements[217])
-# Cs_MOT_1_Path.append(pyopt.OpticalElement(x_conv(29.05), y_conv(28.05), 'r', angle=0, element_type='point_source'))
-# # Cs_MOT_1_Path.append(optical_elements[230])
-# Cs_MOT_1_Path.append(pyopt.OpticalElement(x_conv(28.05), y_conv(32.05), 'r', angle=0, element_type='point_source'))
-# # Cs_MOT_1_Path.append(optical_elements[300])
-# Cs_MOT_1_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(32.05), 'r', angle=0, element_type='point_source'))
-# # Cs_MOT_1.draw(table, Cs_MOT_1_Path)
-#
-# # Cs_MOT_2_Path.append(optical_elements[212])
-# Cs_MOT_2_Path.append(pyopt.OpticalElement(x_conv(20.95), y_conv(28.05), 'r', angle=0, element_type='point_source'))
-# # Cs_MOT_2_Path.append(optical_elements[293])
-# Cs_MOT_2_Path.append(pyopt.OpticalElement(x_conv(20.95), y_conv(21), 't', angle=0, element_type='point_source'))
-# # Cs_MOT_2.draw(table, Cs_MOT_2_Path)
-#
-# # Li_Repump_1_Path.append(optical_elements[228])
-# # Li_Repump_1_Path.append(optical_elements[222])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(18.05), y_conv(48.65), 't', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[221])
-# # Li_Repump_1_Path.append(optical_elements[220])
-# # Li_Repump_1_Path.append(optical_elements[256])
-# # Li_Repump_1_Path.append(optical_elements[211])
-# # Li_Repump_1_Path.append(optical_elements[210])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(18.05), y_conv(34.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[215])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(21.05), y_conv(34.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[216])
-# # Li_Repump_1_Path.append(optical_elements[212])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(21.05), y_conv(27.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[217])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(28.95), y_conv(27.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[230])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(27.95), y_conv(31.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1_Path.append(optical_elements[300])
-# Li_Repump_1_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(31.95), 'r', angle=0, element_type='point_source'))
-# # Li_Repump_1.draw(table, Li_Repump_1_Path)
-#
-# # Li_Repump_2_Path.append(optical_elements[212])
-# Li_Repump_2_Path.append(pyopt.OpticalElement(x_conv(21.05), y_conv(27.95), 't', angle=0, element_type='point_source'))
-# # Li_Repump_2_Path.append(optical_elements[293])
-# Li_Repump_2_Path.append(pyopt.OpticalElement(x_conv(21.05), y_conv(21), 't', angle=0, element_type='point_source'))
-# # Li_Repump_2.draw(table, Li_Repump_2_Path)
-#
-# # Cs_V_Imaging_1_Path.append(optical_elements[204])
-# # Cs_V_Imaging_1_Path.append(optical_elements[205])
-# # Cs_V_Imaging_1_Path.append(optical_elements[202])
-# Cs_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(14.1), y_conv(41.9), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_1_Path.append(optical_elements[201])
-# # Cs_V_Imaging_1_Path.append(optical_elements[200])
-# # Cs_V_Imaging_1_Path.append(optical_elements[209])
-# # Cs_V_Imaging_1_Path.append(optical_elements[208])
-# # Cs_V_Imaging_1_Path.append(optical_elements[206])
-# Cs_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(14.1), y_conv(27.9), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_1_Path.append(optical_elements[217])
-# Cs_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(28.9), y_conv(27.9), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_1_Path.append(optical_elements[230])
-# Cs_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(27.9), y_conv(31.9), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_1_Path.append(optical_elements[300])
-# Cs_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(31.9), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_1.draw(table, Cs_V_Imaging_1_Path)
-#
-# # Cs_V_Imaging_2_Path.append(optical_elements[212])
-# Cs_V_Imaging_2_Path.append(pyopt.OpticalElement(x_conv(21.1), y_conv(27.9), 't', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_2_Path.append(optical_elements[293])
-# Cs_V_Imaging_2_Path.append(pyopt.OpticalElement(x_conv(21.1), y_conv(21), 't', angle=0, element_type='point_source'))
-# # Cs_V_Imaging_2.draw(table, Cs_V_Imaging_2_Path)
-#
-# Li_V_Imaging_1_Path.append(optical_elements[224])
-# Li_V_Imaging_1_Path.append(optical_elements[223])
-# Li_V_Imaging_1_Path.append(optical_elements[229])
-# # Li_V_Imaging_1_Path.append(optical_elements[212])
-# Li_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(20.9), y_conv(28.1), 'r', angle=0, element_type='point_source'))
-# # Li_V_Imaging_1_Path.append(optical_elements[217])
-# Li_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(29.1), y_conv(28.1), 'r', angle=0, element_type='point_source'))
-# # Li_V_Imaging_1_Path.append(optical_elements[230])
-# Li_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(28.1), y_conv(32.1), 'r', angle=0, element_type='point_source'))
-# # Li_V_Imaging_1_Path.append(optical_elements[300])
-# Li_V_Imaging_1_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(32.1), 'r', angle=0, element_type='point_source'))
-# # Li_V_Imaging_1.draw(table, Li_V_Imaging_1_Path)
-#
-# # Li_V_Imaging_2_Path.append(optical_elements[212])
-# Li_V_Imaging_2_Path.append(pyopt.OpticalElement(x_conv(20.9), y_conv(28.1), 't', angle=0, element_type='point_source'))
-# # Li_V_Imaging_2_Path.append(optical_elements[293])
-# Li_V_Imaging_2_Path.append(pyopt.OpticalElement(x_conv(20.9), y_conv(21), 't', angle=0, element_type='point_source'))
-# # Li_V_Imaging_2.draw(table, Li_V_Imaging_2_Path)
-#
-# Cs_V_Optical_Pump_3_Path.append(optical_elements[191])
-# Cs_V_Optical_Pump_3_Path.append(optical_elements[213])
-# # Cs_V_Optical_Pump_3_Path.append(optical_elements[214])
-# Cs_V_Optical_Pump_3_Path.append(pyopt.OpticalElement(x_conv(18), y_conv(27.85), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_3_Path.append(optical_elements[217])
-# Cs_V_Optical_Pump_3_Path.append(pyopt.OpticalElement(x_conv(28.85), y_conv(27.85), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_3_Path.append(optical_elements[230])
-# Cs_V_Optical_Pump_3_Path.append(pyopt.OpticalElement(x_conv(27.85), y_conv(31.85), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_3_Path.append(optical_elements[300])
-# Cs_V_Optical_Pump_3_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(31.85), 'r', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_3.draw(table, Cs_V_Optical_Pump_3_Path)
-#
-# # Cs_V_Optical_Pump_4_Path.append(optical_elements[212])
-# Cs_V_Optical_Pump_4_Path.append(pyopt.OpticalElement(x_conv(21.15), y_conv(27.85), 't', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_4_Path.append(optical_elements[293])
-# Cs_V_Optical_Pump_4_Path.append(pyopt.OpticalElement(x_conv(21.15), y_conv(21), 't', angle=0, element_type='point_source'))
-# # Cs_V_Optical_Pump_4.draw(table, Cs_V_Optical_Pump_4_Path)
-#
-# # RSC_3_Path.append(optical_elements[191])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(6.05), y_conv(29.95), 'r', angle=0, element_type='point_source'))
-# # RSC_3_Path.append(optical_elements[213])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(18.05), y_conv(29.95), 'r', angle=0, element_type='point_source'))
-# # RSC_3_Path.append(optical_elements[214])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(18.05), y_conv(27.80), 'r', angle=0, element_type='point_source'))
-# # RSC_3_Path.append(optical_elements[217])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(28.80), y_conv(27.80), 'r', angle=0, element_type='point_source'))
-# # RSC_3_Path.append(optical_elements[230])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(27.80), y_conv(31.80), 'r', angle=0, element_type='point_source'))
-# # RSC_3_Path.append(optical_elements[300])
-# RSC_3_Path.append(pyopt.OpticalElement(x_conv(33), y_conv(31.80), 'r', angle=0, element_type='point_source'))
-# # RSC_3.draw(table, RSC_3_Path)
-#
-# # RSC_4_Path.append(optical_elements[212])
-# RSC_4_Path.append(pyopt.OpticalElement(x_conv(21.2), y_conv(27.8), 't', angle=0, element_type='point_source'))
-# # RSC_4_Path.append(optical_elements[293])
-# RSC_4_Path.append(pyopt.OpticalElement(x_conv(21.2), y_conv(21), 't', angle=0, element_type='point_source'))
-# # RSC_4.draw(table, RSC_4_Path)
+
+
+def draw_beam(beam, path, list):
+    for l in list:
+        path.append(optical_elements[l])
+    beam.draw(table, path)
+
+draw_beam(Li_MOT_1, Li_MOT_1_Path, 
+          [228, 222, 221, 220, 211, 210, 215, 216, 212, 217, 230, 303])
+
+draw_beam(Cs_MOT_1, Cs_MOT_1_Path, 
+          [228, 200, 197, 218, 199, 196, 209, 208, 207, 206, 212, 217, 230, 303])
+
+draw_beam(Cs_V_Imaging_1, Cs_V_Imaging_1_Path,
+          [205, 331, 202, 209, 208, 207, 206, 212, 217, 230, 303])
+
+draw_beam(Li_V_Imaging_1, Li_V_Imaging_1_Path,
+          [224, 223, 212, 217, 230, 303])
+
+draw_beam(Cs_V_Optical_Pump_3, Cs_V_Optical_Pump_3_Path,
+          [228, 219, 192, 193, 214, 217, 230, 303])
+
+draw_beam(RSC_3, RSC_3_Path,
+          [228, 219, 192, 193, 214, 217, 230, 303])
 
 
 file_path = "table_optics_v3.pdf"
