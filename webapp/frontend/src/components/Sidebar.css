@@ -1,0 +1,227 @@
+.sidebar {
+  width: 240px; flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border-side);
+  display: flex; flex-direction: column;
+  overflow-y: auto; font-size: 12px;
+}
+
+/* ── Tabs ── */
+.sidebar-tabs { display: flex; border-bottom: 1px solid var(--border-side); flex-shrink: 0; }
+.sidebar-tab {
+  flex: 1; background: none; border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.7px;
+  padding: 7px 0; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sidebar-tab:hover { color: var(--text-dim); }
+.sidebar-tab.active { color: var(--accent-text); border-bottom-color: var(--accent-text); }
+
+/* ── Sections ── */
+.sidebar-section { border-bottom: 1px solid var(--border-side); padding: 10px 12px; }
+
+.sidebar-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+}
+
+.toggle-all-btns { display: flex; gap: 4px; }
+
+.small-btn {
+  background: var(--bg-item); border: 1px solid var(--border-input);
+  color: var(--text-dim); border-radius: 3px; padding: 1px 6px;
+  font-size: 10px; cursor: pointer;
+}
+.small-btn:disabled { opacity: 0.4; cursor: default; }
+.small-btn:hover:not(:disabled) { background: var(--border-input); color: var(--text); }
+
+/* ── Color swatch / picker ── */
+.color-swatch {
+  display: inline-block; border-radius: 2px; flex-shrink: 0;
+  cursor: pointer; position: relative; overflow: hidden;
+}
+.color-swatch input[type="color"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: none; padding: 0;
+}
+
+/* ── Beam paths & bg groups list ── */
+.path-list { list-style: none; display: flex; flex-direction: column; gap: 3px; }
+
+.path-item {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 4px 3px 4px; border-radius: 4px;
+  transition: background 0.1s; user-select: none;
+}
+.path-item:hover { background: var(--bg-item); }
+.path-item.editing { background: var(--bg-item); outline: 1px solid var(--accent); }
+.path-item.off .path-name { color: var(--text-muted); }
+.path-item.off .color-swatch { opacity: 0.3; }
+
+.path-name {
+  flex: 1; color: var(--text); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.path-edit-btn {
+  flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: 3px;
+  color: var(--text-muted); font-size: 11px; padding: 1px 4px; cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.path-edit-btn:hover { background: var(--bg-item); color: var(--text); }
+.path-edit-btn.active { background: var(--accent); border-color: var(--accent-bright); color: var(--text); }
+
+.path-delete-btn {
+  flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: 3px;
+  color: var(--text-muted); font-size: 10px; padding: 1px 3px; cursor: pointer;
+}
+.path-delete-btn:hover { background: #3a1a1a; color: #ff6b6b; }
+
+.stroke-input {
+  width: 36px;
+  background: var(--bg-input); border: 1px solid var(--border-input);
+  border-radius: 3px; color: var(--text); font-size: 10px; padding: 1px 3px;
+  text-align: center;
+}
+.stroke-input:focus { outline: none; border-color: var(--accent-bright); }
+
+/* ── Add group / path form ── */
+.add-group-form {
+  display: flex; align-items: center; gap: 4px;
+  margin-bottom: 8px; flex-wrap: wrap;
+}
+.add-name-input { flex: 1; min-width: 80px; }
+
+/* ── Beam path edge editor ── */
+.path-edit-panel { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+
+.path-edit-hint {
+  font-size: 10px; color: var(--text-muted); margin-bottom: 6px; line-height: 1.4;
+}
+
+.edge-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+
+.edge-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 4px; border-radius: 3px;
+  background: var(--bg-item);
+}
+.edge-label { flex: 1; color: var(--text); font-size: 11px; font-family: monospace; }
+.edge-delete {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 11px; cursor: pointer; padding: 0 3px; line-height: 1;
+  border-radius: 2px; flex-shrink: 0;
+}
+.edge-delete:hover { background: #3a1a1a; color: #ff6b6b; }
+.edge-empty { color: var(--text-faint); font-size: 11px; font-style: italic; padding: 2px 4px; }
+
+/* ── Bg object edge editor ── */
+.bg-edge-item { flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; }
+.bg-edge-item .edge-delete { align-self: flex-end; margin-top: -2px; }
+
+.bg-coord-row { display: flex; align-items: center; gap: 3px; flex-wrap: nowrap; }
+.coord-arrow { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
+
+.coord-field { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.coord-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+.coord-input {
+  width: 42px;
+  background: var(--bg-input); border: 1px solid var(--border-input);
+  border-radius: 3px; color: var(--text); font-size: 10px; padding: 2px 3px;
+  text-align: center;
+}
+.coord-input:focus { outline: none; border-color: var(--accent-bright); }
+
+/* ── Selected element ── */
+.element-detail { color: var(--text); }
+.detail-label { font-weight: 600; color: var(--accent-text); margin-bottom: 8px; font-size: 13px; }
+.detail-table { width: 100%; border-collapse: collapse; }
+.detail-table td { padding: 2px 4px; vertical-align: top; }
+.detail-table td:first-child {
+  color: var(--accent); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.5px; width: 70px;
+}
+.detail-table td:last-child { color: var(--text); word-break: break-all; }
+
+/* ── Settings ── */
+.setting-row {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+}
+.setting-row:last-child { margin-bottom: 0; }
+.setting-label { color: var(--text-muted); font-size: 11px; flex-shrink: 0; width: 72px; }
+.snap-presets { display: flex; gap: 3px; }
+
+.snap-btn {
+  background: var(--bg-item); border: 1px solid var(--border-input);
+  color: var(--text-dim); border-radius: 3px; padding: 2px 7px;
+  font-size: 11px; cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.snap-btn:hover { background: var(--border-input); color: var(--text); }
+.snap-btn.active { background: var(--accent); border-color: var(--accent-bright); color: var(--text); }
+
+.snap-input {
+  width: 56px;
+  background: var(--bg-input); border: 1px solid var(--border-input);
+  border-radius: 3px; color: var(--text); font-size: 11px; padding: 2px 6px;
+}
+.snap-input:focus { outline: none; border-color: var(--accent-bright); }
+
+.setting-unit { color: var(--text-muted); font-size: 10px; }
+
+.setting-toggle {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text); font-size: 12px; cursor: pointer;
+  padding: 4px 0; user-select: none;
+}
+.setting-toggle input[type="checkbox"] {
+  accent-color: var(--accent-bright); width: 13px; height: 13px; cursor: pointer;
+}
+
+/* ── Optics styles ── */
+.symbol-add-form { margin-bottom: 8px; }
+.symbol-add-form .setting-row { margin-bottom: 4px; }
+.symbol-add-form .snap-input { flex: 1; width: auto; }
+
+.sym-select {
+  flex: 1; background: var(--bg-input); border: 1px solid var(--border-input);
+  border-radius: 3px; color: var(--text); font-size: 10px; padding: 2px 4px;
+  min-width: 0;
+}
+.sym-select:focus { outline: none; border-color: var(--accent-bright); }
+
+.sym-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
+
+.sym-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 4px; border-radius: 3px;
+  background: var(--bg-item);
+}
+.sym-row.editing { outline: 1px solid var(--accent); }
+
+.sym-preview {
+  width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;
+  filter: invert(0.7);
+}
+[data-theme="dark"] .sym-preview { filter: invert(0.8); }
+
+.sym-type {
+  flex: 1; color: var(--text); font-size: 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sym-edit-panel {
+  width: 100%; padding-top: 6px; margin-top: 4px;
+  border-top: 1px solid var(--border-side);
+}
+.sym-edit-panel .setting-row { margin-bottom: 4px; }
+.sym-edit-panel .snap-input { width: 52px; }
+
+/* ── Hint ── */
+.sidebar-hint { margin-top: auto; border-bottom: none; color: var(--text-faint); line-height: 1.6; font-size: 11px; }

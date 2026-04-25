@@ -1,0 +1,19 @@
+Group,Color,StrokeWidth,x1,y1,x2,y2
+blue outline,blue,4,-0.5,-0.5,26.5,-0.5
+blue outline,blue,4,-0.5,-0.5,-0.5,50.5
+blue outline,blue,4,26.5,-0.5,26.5,25.5
+blue outline,blue,4,20.5,25.5,26.5,25.5
+blue outline,blue,4,20.5,25.5,20.5,50.5
+blue outline,blue,4,-0.5,50.5,20.5,50.5
+purple outline,purple,4,27.5,-0.5,48.5,-0.5
+purple outline,purple,4,48.5,-0.5,48.5,80.5
+purple outline,purple,4,27.5,-0.5,27.5,50.5
+purple outline,purple,4,27.5,50.5,33.5,50.5
+purple outline,purple,4,33.5,50.5,33.5,66.5
+purple outline,purple,4,27.5,66.5,33.5,66.5
+purple outline,purple,4,27.5,66.5,27.5,80.5
+purple outline,purple,4,27.5,80.5,48.5,80.5
+red outline,red,4,36,28.5,36,52.5
+red outline,red,4,12,28.5,12,52.5
+red outline,red,4,12,28.5,36,28.5
+red outline,red,4,12,52.5,36,52.5

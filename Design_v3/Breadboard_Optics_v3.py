@@ -80,7 +80,7 @@ x1_18, x2_18, y1_18, y2_18 = table.angled_line(x=x_conv(24), y=y_conv(52.5), siz
 table.ax.plot([x1_18, x2_18], [y1_18, y2_18], color='red', linewidth=edge_width)
 
 
-df = pd.read_csv('OpticsSetupBreadboard_v3.csv')
+df = pd.read_csv('LiCs Optical Design - OpticsSetupBreadboard_v3.csv')
 
 x_displacement = 0
 y_displacement = 0
@@ -88,6 +88,7 @@ x_displacement_2 = 0
 y_displacement_2 = 0
 x_displacement_3 = 0
 y_displacement_3 = 0
+
 
 
 label_position = 'top'
