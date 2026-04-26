@@ -38,9 +38,13 @@ async function inlineSVGImages(rootEl) {
     const iw = parseFloat(img.getAttribute('width')  ?? sw)
     const ih = parseFloat(img.getAttribute('height') ?? sh)
 
-    // Build a <g> that maps the symbol's coordinate space onto the image's placement
+    // Build a <g> that maps the symbol's coordinate space onto the image's placement.
+    // Use uniform scale (meet) + center offset to match SVG's default preserveAspectRatio.
+    const scale   = Math.min(iw / sw, ih / sh)
+    const offsetX = ix + (iw - sw * scale) / 2
+    const offsetY = iy + (ih - sh * scale) / 2
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-    g.setAttribute('transform', `translate(${ix},${iy}) scale(${iw / sw},${ih / sh})`)
+    g.setAttribute('transform', `translate(${offsetX},${offsetY}) scale(${scale})`)
 
     const opacity = img.getAttribute('opacity')
     if (opacity) g.setAttribute('opacity', opacity)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { colorToHex, AVAILABLE_SYMBOLS } from '../utils/symbols'
 import './Sidebar.css'
 
@@ -16,20 +16,25 @@ function ColorSwatch({ color, onChange, size = 10 }) {
 export default function Sidebar({
   // Beam paths
   beamPaths, visiblePaths, onToggle, onToggleAll,
-  onAddPath, onDeletePath, onSetPathColor,
+  onAddPath, onDeletePath, onSetPathColor, onRenamePath,
   // Beam path editing
-  selectedElement,
+  selectedLabels, selectedElement, allMetaKeys, onUpdateElement,
   editingPath, onSetEditingPath, onDeleteEdge,
   // Background objects
   bgGroups, visibleBg, onToggleBg, onToggleAllBg,
-  onAddBgGroup, onDeleteBgGroup, onSetBgGroupColor, onSetBgGroupStroke,
+  onAddBgGroup, onDeleteBgGroup, onSetBgGroupColor, onSetBgGroupStroke, onRenameBgGroup,
   editingBgGroup, onSetEditingBgGroup, onDeleteBgEdge, onUpdateBgEdge,
   // Config + settings
   config, onConfigChange,
   settings, onSettingsChange,
   onSaveSettings, onLoadSettings,
   // Symbol defs
-  symbolDefs, onAddSymbolDef, onUpdateSymbolDef, onDeleteSymbolDef,
+  symbolDefs, onAddSymbolDef, onUpdateSymbolDef, onDeleteSymbolDef, onRenameSymbolDef,
+  // Elements list + add
+  elements, onSelectElement,
+  onAddElement, lastAddedTypeRef,
+  addElemAt, onAddElemAtDone,
+  sidebarWidth,
 }) {
   const [tab, setTab] = useState('paths')
 
@@ -44,17 +49,50 @@ export default function Sidebar({
   const [newBgColor,   setNewBgColor]   = useState('#888888')
   const [newBgStroke,  setNewBgStroke]  = useState(2)
 
-  // Symbol def add form
+  // Rename state
+  const [renamingPath, setRenamingPath] = useState(null)
+  const [renamePathVal, setRenamePathVal] = useState('')
+  const [renamingBg,   setRenamingBg]   = useState(null)
+  const [renameBgVal,  setRenameBgVal]  = useState('')
+
+  // Symbol def add / rename
   const [addingSymbol,    setAddingSymbol]    = useState(false)
   const [newSymType,      setNewSymType]      = useState('')
   const [newSymHref,      setNewSymHref]      = useState('b-mir.svg')
   const [newSymDisplayH,  setNewSymDisplayH]  = useState(11)
   const [editingSymType,  setEditingSymType]  = useState(null)
+  const [renamingSymType, setRenamingSymType] = useState(null)
+  const [renameSymVal,    setRenameSymVal]    = useState('')
+
+  // Add element form
+  const [addingElement, setAddingElement] = useState(false)
+  const [newElemType,   setNewElemType]   = useState('')
+  const [newElemLabel,  setNewElemLabel]  = useState('')
+  const [newElemX,      setNewElemX]      = useState(null)
+  const [newElemY,      setNewElemY]      = useState(null)
+
+  // Triggered by N key from canvas
+  useEffect(() => {
+    if (!addElemAt) return
+    setNewElemLabel(addElemAt.label)
+    setNewElemType(addElemAt.type)
+    setNewElemX(addElemAt.x)
+    setNewElemY(addElemAt.y)
+    setAddingElement(true)
+    setTab('elements')
+    onAddElemAtDone?.()
+  }, [addElemAt]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Elements tab filter
+  const [elemFilter, setElemFilter] = useState('')
 
   function set(key, val) { onSettingsChange({ ...settings, [key]: val }) }
   function setNum(key, val) { const v = parseFloat(val); if (!isNaN(v) && v > 0) set(key, v) }
   function setConfig(key, val) {
-    const v = parseFloat(val); if (!isNaN(v) && v > 0) onConfigChange({ ...config, [key]: v })
+    const v = parseFloat(val)
+    if (isNaN(v)) return
+    const isOrigin = key === 'origin_x' || key === 'origin_y'
+    if (isOrigin || v > 0) onConfigChange({ ...config, [key]: v })
   }
 
   const pathNames  = Object.keys(beamPaths)
@@ -88,11 +126,12 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ fontSize: `${settings.uiFontSize ?? 12}px`, width: sidebarWidth ?? 280 }}>
       <div className="sidebar-tabs">
-        <button className={`sidebar-tab ${tab === 'paths'   ? 'active' : ''}`} onClick={() => setTab('paths')}>Paths</button>
-        <button className={`sidebar-tab ${tab === 'objects' ? 'active' : ''}`} onClick={() => setTab('objects')}>Objects</button>
-        <button className={`sidebar-tab ${tab === 'settings'? 'active' : ''}`} onClick={() => setTab('settings')}>Settings</button>
+        <button className={`sidebar-tab ${tab === 'paths'    ? 'active' : ''}`} onClick={() => setTab('paths')}>Paths</button>
+        <button className={`sidebar-tab ${tab === 'elements' ? 'active' : ''}`} onClick={() => setTab('elements')}>Elements</button>
+        <button className={`sidebar-tab ${tab === 'objects'  ? 'active' : ''}`} onClick={() => setTab('objects')}>Objects</button>
+        <button className={`sidebar-tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>Settings</button>
       </div>
 
       {/* ── Paths tab ─────────────────────────────────────────────────────── */}
@@ -125,10 +164,26 @@ export default function Sidebar({
                 const { color } = beamPaths[name]
                 const on        = visiblePaths[name]
                 const isEditing = name === editingPath
+                const isRenaming = renamingPath === name
                 return (
                   <li key={name} className={`path-item ${on ? 'on' : 'off'} ${isEditing ? 'editing' : ''}`}>
                     <ColorSwatch color={color} onChange={c => onSetPathColor(name, c)} />
-                    <span className="path-name" onClick={() => onToggle(name)}>{name}</span>
+                    {isRenaming ? (
+                      <input className="snap-input" style={{ flex: 1 }}
+                        value={renamePathVal}
+                        onChange={e => setRenamePathVal(e.target.value)}
+                        onBlur={() => { onRenamePath(name, renamePathVal); setRenamingPath(null) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { onRenamePath(name, renamePathVal); setRenamingPath(null) }
+                          if (e.key === 'Escape') setRenamingPath(null)
+                        }}
+                        autoFocus />
+                    ) : (
+                      <span className="path-name"
+                        onClick={() => onToggle(name)}
+                        onDoubleClick={() => { setRenamingPath(name); setRenamePathVal(name) }}
+                        title="Double-click to rename">{name}</span>
+                    )}
                     <button
                       className={`path-edit-btn ${isEditing ? 'active' : ''}`}
                       title={isEditing ? 'Stop editing' : 'Edit edges'}
@@ -164,30 +219,107 @@ export default function Sidebar({
             </section>
           )}
 
-          {/* Selected element detail */}
-          {selectedElement && (
-            <section className="sidebar-section">
-              <div className="sidebar-section-header"><span>Selected</span></div>
-              <div className="element-detail">
-                <div className="detail-label">{selectedElement.label}</div>
-                <table className="detail-table">
-                  <tbody>
-                    <tr><td>Type</td><td>{selectedElement.type || '—'}</td></tr>
-                    <tr><td>X</td><td>{selectedElement.x}</td></tr>
-                    <tr><td>Y</td><td>{selectedElement.y}</td></tr>
-                    <tr><td>Orientation</td><td>{selectedElement.orientation}°</td></tr>
-                    {Object.entries(selectedElement)
-                      .filter(([k]) => !['label','type','x','y','orientation','id'].includes(k))
-                      .map(([k, v]) => <tr key={k}><td>{k}</td><td>{String(v)}</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
 
           <section className="sidebar-section sidebar-hint">
-            <p>Scroll to zoom · Drag to pan</p>
-            <p>Click element to inspect · ✎ to edit path edges</p>
+            <p>Scroll to zoom · Drag canvas to pan</p>
+            <p>Click to select · drag to move · double-click name to rename</p>
+            <p>Del = hide (In Design = FALSE) · Shift+Del = delete from file</p>
+          </section>
+        </>
+      )}
+
+      {/* ── Elements tab ──────────────────────────────────────────────────── */}
+      {tab === 'elements' && (
+        <>
+          <section className="sidebar-section">
+            <div className="sidebar-section-header">
+              <span>Add Element</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 400 }}>N key at cursor</span>
+              <button className="small-btn" onClick={() => {
+                const ox = config.origin_x ?? 0, oy = config.origin_y ?? 0
+                const cx = ox + config.table_length / 2, cy = oy + config.table_width / 2
+                setNewElemType(lastAddedTypeRef?.current || '')
+                setNewElemLabel('')
+                setNewElemX(Math.round(cx * 2) / 2)
+                setNewElemY(Math.round(cy * 2) / 2)
+                setAddingElement(p => !p)
+              }}>+</button>
+            </div>
+            {addingElement && (() => {
+              function commitAdd() {
+                const type = newElemType.trim()
+                if (!type) return
+                onAddElement({ type, label: newElemLabel.trim() || undefined, x: newElemX, y: newElemY })
+                setAddingElement(false)
+              }
+              function kd(e) {
+                if (e.key === 'Enter') commitAdd()
+                if (e.key === 'Escape') setAddingElement(false)
+              }
+              return (
+                <div className="add-group-form" style={{ flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <input className="snap-input" style={{ width: 70, flexShrink: 0 }}
+                      placeholder="O-number" value={newElemLabel}
+                      onChange={e => setNewElemLabel(e.target.value)} onKeyDown={kd} autoFocus />
+                    <input className="snap-input add-name-input" placeholder="Type (e.g. mirror)"
+                      value={newElemType} onChange={e => setNewElemType(e.target.value)} onKeyDown={kd} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      ({newElemX?.toFixed(1)}, {newElemY?.toFixed(1)})
+                    </span>
+                    <button className="small-btn" onClick={commitAdd}>Add</button>
+                    <button className="small-btn" onClick={() => setAddingElement(false)}>✕</button>
+                  </div>
+                </div>
+              )
+            })()}
+          </section>
+
+          <section className="sidebar-section" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {(() => {
+              const all = elements ?? []
+              const hiddenCount = all.filter(el => el.in_design === false).length
+              return (
+                <div className="sidebar-section-header">
+                  <span>All Elements ({all.length}{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ''})</span>
+                </div>
+              )
+            })()}
+            <input className="snap-input" style={{ margin: '2px 0 4px', width: '100%', boxSizing: 'border-box' }}
+              placeholder="Filter by label or type…"
+              value={elemFilter}
+              onChange={e => setElemFilter(e.target.value)} />
+            <ul className="elem-list">
+              {(elements ?? [])
+                .filter(el => {
+                  if (!elemFilter.trim()) return true
+                  const q = elemFilter.toLowerCase()
+                  return el.label.toLowerCase().includes(q) || (el.type || '').toLowerCase().includes(q)
+                })
+                .map(el => {
+                  const isSel = selectedLabels?.has(el.label)
+                  const inDesign = el.in_design !== false
+                  return (
+                    <li key={el.label}
+                      className={`elem-item ${isSel ? 'selected' : ''} ${!inDesign ? 'elem-hidden' : ''}`}
+                      onClick={e => onSelectElement(el.label, e.shiftKey)}>
+                      <input type="checkbox" className="elem-indesign-check"
+                        checked={inDesign}
+                        onChange={e => onUpdateElement(el.label, 'in_design', e.target.checked)}
+                        onClick={e => e.stopPropagation()} />
+                      <span className="elem-label">{el.label}</span>
+                      <span className="elem-type">{el.type}</span>
+                    </li>
+                  )
+                })}
+            </ul>
+          </section>
+
+          <section className="sidebar-section sidebar-hint">
+            <p>Click to select · Shift+click for multi-select</p>
+            <p>Del = hide (In Design = FALSE) · Shift+Del = delete from file</p>
           </section>
         </>
       )}
@@ -223,12 +355,28 @@ export default function Sidebar({
             <ul className="path-list">
               {bgNames.map(name => {
                 const { color, strokeWidth = 2 } = bgGroups[name]
-                const on        = visibleBg?.[name]
-                const isEditing = name === editingBgGroup
+                const on         = visibleBg?.[name]
+                const isEditing  = name === editingBgGroup
+                const isRenaming = renamingBg === name
                 return (
                   <li key={name} className={`path-item ${on ? 'on' : 'off'} ${isEditing ? 'editing' : ''}`}>
                     <ColorSwatch color={color} onChange={c => onSetBgGroupColor(name, c)} />
-                    <span className="path-name" onClick={() => onToggleBg(name)}>{name}</span>
+                    {isRenaming ? (
+                      <input className="snap-input" style={{ flex: 1 }}
+                        value={renameBgVal}
+                        onChange={e => setRenameBgVal(e.target.value)}
+                        onBlur={() => { onRenameBgGroup(name, renameBgVal); setRenamingBg(null) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { onRenameBgGroup(name, renameBgVal); setRenamingBg(null) }
+                          if (e.key === 'Escape') setRenamingBg(null)
+                        }}
+                        autoFocus />
+                    ) : (
+                      <span className="path-name"
+                        onClick={() => onToggleBg(name)}
+                        onDoubleClick={() => { setRenamingBg(name); setRenameBgVal(name) }}
+                        title="Double-click to rename">{name}</span>
+                    )}
                     <input className="stroke-input" type="number" min="0.5" max="20" step="0.5"
                       value={strokeWidth}
                       onChange={e => onSetBgGroupStroke(name, parseFloat(e.target.value) || 1)}
@@ -301,6 +449,16 @@ export default function Sidebar({
                 onChange={e => set('darkMode', e.target.checked)} />
               <span>Dark mode</span>
             </label>
+            <div className="setting-row" style={{ marginTop: 6 }}>
+              <span className="setting-label">UI font size</span>
+              <div className="snap-presets">
+                {[10, 11, 12, 13, 14, 16].map(v => (
+                  <button key={v}
+                    className={`snap-btn ${(settings.uiFontSize ?? 12) === v ? 'active' : ''}`}
+                    onClick={() => set('uiFontSize', v)}>{v}</button>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="sidebar-section">
@@ -326,6 +484,20 @@ export default function Sidebar({
               <input className="snap-input" type="number" min="1" step="1"
                 value={config.table_width}
                 onChange={e => setConfig('table_width', e.target.value)} />
+            </div>
+            <div className="setting-row">
+              <span className="setting-label">Origin X</span>
+              <input className="snap-input" type="number" step="0.5"
+                value={config.origin_x ?? 0}
+                onChange={e => setConfig('origin_x', e.target.value)} />
+              <span className="setting-unit">in</span>
+            </div>
+            <div className="setting-row">
+              <span className="setting-label">Origin Y</span>
+              <input className="snap-input" type="number" step="0.5"
+                value={config.origin_y ?? 0}
+                onChange={e => setConfig('origin_y', e.target.value)} />
+              <span className="setting-unit">in</span>
             </div>
           </section>
 
@@ -403,9 +575,7 @@ export default function Sidebar({
                 </div>
                 <div className="setting-row">
                   <span className="setting-label">SVG file</span>
-                  <select className="sym-select" value={newSymHref} onChange={e => setNewSymHref(e.target.value)}>
-                    {AVAILABLE_SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <SVGPicker value={newSymHref} onChange={setNewSymHref} />
                 </div>
                 <div className="setting-row">
                   <span className="setting-label">Height (px)</span>
@@ -423,6 +593,12 @@ export default function Sidebar({
               {Object.entries(symbolDefs).map(([type, def]) => (
                 <SymbolRow key={type} type={type} def={def}
                   editing={editingSymType === type}
+                  renaming={renamingSymType === type}
+                  renameVal={renameSymVal}
+                  onRenameValChange={setRenameSymVal}
+                  onStartRename={() => { setRenamingSymType(type); setRenameSymVal(type) }}
+                  onCommitRename={() => { onRenameSymbolDef(type, renameSymVal); setRenamingSymType(null) }}
+                  onCancelRename={() => setRenamingSymType(null)}
                   onStartEdit={() => setEditingSymType(type)}
                   onStopEdit={() => setEditingSymType(null)}
                   onUpdate={patch => onUpdateSymbolDef(type, patch)}
@@ -433,7 +609,99 @@ export default function Sidebar({
           </section>
         </>
       )}
+      {/* ── Persistent selected-element panel ──────────────────────────────── */}
+      {selectedLabels?.size === 1 && selectedElement && (
+        <section className="sidebar-section sidebar-selected-panel">
+          <div className="sidebar-section-header"><span>Selected — {selectedElement.label}</span></div>
+          <div className="element-detail">
+            <table className="detail-table">
+              <tbody>
+                <tr>
+                  <td>Type</td>
+                  <td><FieldInput value={selectedElement.type ?? ''} onChange={v => onUpdateElement(selectedElement.label, 'type', v)} /></td>
+                </tr>
+                <tr>
+                  <td>X</td>
+                  <td><FieldInput value={selectedElement.x} type="number" onChange={v => onUpdateElement(selectedElement.label, 'x', v)} /></td>
+                </tr>
+                <tr>
+                  <td>Y</td>
+                  <td><FieldInput value={selectedElement.y} type="number" onChange={v => onUpdateElement(selectedElement.label, 'y', v)} /></td>
+                </tr>
+                <tr>
+                  <td>Orient</td>
+                  <td><FieldInput value={selectedElement.orientation ?? 0} type="number" suffix="°" onChange={v => onUpdateElement(selectedElement.label, 'orientation', v)} /></td>
+                </tr>
+                <tr>
+                  <td>In Design</td>
+                  <td>
+                    <input type="checkbox"
+                      checked={selectedElement.in_design !== false}
+                      onChange={e => onUpdateElement(selectedElement.label, 'in_design', e.target.checked)}
+                      style={{ accentColor: 'var(--accent-bright)', cursor: 'pointer' }} />
+                  </td>
+                </tr>
+                {(allMetaKeys ?? []).map(k => (
+                  <tr key={k}>
+                    <td>{k}</td>
+                    <td><FieldInput value={selectedElement[k] ?? ''} onChange={v => onUpdateElement(selectedElement.label, k, v)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      {selectedLabels?.size > 1 && (
+        <section className="sidebar-section sidebar-selected-panel">
+          <div className="sidebar-section-header"><span>Selected</span></div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.9em', padding: '2px 0' }}>
+            {selectedLabels.size} elements selected
+          </div>
+        </section>
+      )}
     </aside>
+  )
+}
+
+// ── Generic editable field for element detail panel ───────────────────────────
+function FieldInput({ value, onChange, type = 'text', suffix }) {
+  const [local, setLocal] = useState(String(value ?? ''))
+  const [focused, setFocused] = useState(false)
+
+  const isBool = typeof value === 'boolean'
+  const isBoolStr = !isBool && typeof value === 'string' && (value === 'TRUE' || value === 'FALSE')
+
+  if (isBool) {
+    return (
+      <input type="checkbox" checked={value}
+        onChange={e => onChange(e.target.checked)}
+        style={{ accentColor: 'var(--accent-bright)', cursor: 'pointer' }} />
+    )
+  }
+  if (isBoolStr) {
+    return (
+      <input type="checkbox" checked={value === 'TRUE'}
+        onChange={e => onChange(e.target.checked ? 'TRUE' : 'FALSE')}
+        style={{ accentColor: 'var(--accent-bright)', cursor: 'pointer' }} />
+    )
+  }
+
+  const display = focused ? local : String(value ?? '')
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <input
+        className="coord-input"
+        style={{ width: type === 'number' ? 52 : '100%', flex: type === 'text' ? 1 : undefined }}
+        type={type}
+        value={display}
+        onChange={e => setLocal(e.target.value)}
+        onFocus={() => { setLocal(String(value ?? '')); setFocused(true) }}
+        onBlur={() => { setFocused(false); onChange(local) }}
+        onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+      />
+      {suffix && <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{suffix}</span>}
+    </span>
   )
 }
 
@@ -456,12 +724,85 @@ function CoordInput({ label, val, onChange }) {
   )
 }
 
+// ── SVG symbol picker ─────────────────────────────────────────────────────────
+function SVGPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos]   = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+
+  function openPicker() {
+    const rect  = btnRef.current.getBoundingClientRect()
+    const popW  = 256
+    const popH  = 264
+    const top   = rect.bottom + 4 + popH > window.innerHeight ? rect.top - popH - 4 : rect.bottom + 4
+    const left  = Math.min(rect.left, window.innerWidth - popW - 8)
+    setPos({ top, left })
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) {
+      if (!e.target.closest('.svg-picker-popover') && !btnRef.current?.contains(e.target))
+        setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <button ref={btnRef} className="sym-select"
+        style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+        onClick={() => open ? setOpen(false) : openPicker()}>
+        <img src={`/symbols/${value}`} className="sym-preview" style={{ width: 16, height: 16, flexShrink: 0 }} alt={value} />
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.75em' }}>▾</span>
+      </button>
+      {open && (
+        <div className="svg-picker-popover" style={{
+          position: 'fixed', top: pos.top, left: pos.left, zIndex: 600,
+          width: 256, maxHeight: 264, overflowY: 'auto',
+          background: 'var(--bg-sidebar)', border: '1px solid var(--border-side)',
+          borderRadius: 5, padding: 6, boxShadow: '0 4px 16px #0006',
+          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4,
+        }}>
+          {AVAILABLE_SYMBOLS.map(s => (
+            <button key={s} onClick={() => { onChange(s); setOpen(false) }} title={s}
+              style={{
+                background: s === value ? 'var(--accent)' : 'var(--bg-item)',
+                border: `1px solid ${s === value ? 'var(--accent-bright)' : 'transparent'}`,
+                borderRadius: 3, padding: 4, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+              <img src={`/symbols/${s}`} className="sym-preview" style={{ width: 22, height: 22 }} alt={s} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Optics style row ──────────────────────────────────────────────────────────
-function SymbolRow({ type, def, editing, onStartEdit, onStopEdit, onUpdate, onDelete }) {
+function SymbolRow({ type, def, editing, renaming, renameVal, onRenameValChange,
+    onStartRename, onCommitRename, onCancelRename, onStartEdit, onStopEdit, onUpdate, onDelete }) {
   return (
     <div className={`sym-row ${editing ? 'editing' : ''}`}>
       <img className="sym-preview" src={def.href} alt={type} />
-      <span className="sym-type" title={type}>{type}</span>
+      {renaming ? (
+        <input className="snap-input" style={{ flex: 1, minWidth: 0 }}
+          value={renameVal}
+          onChange={e => onRenameValChange(e.target.value)}
+          onBlur={onCommitRename}
+          onKeyDown={e => {
+            if (e.key === 'Enter') onCommitRename()
+            if (e.key === 'Escape') onCancelRename()
+          }}
+          autoFocus />
+      ) : (
+        <span className="sym-type" title="Double-click to rename" onDoubleClick={onStartRename}>{type}</span>
+      )}
       <button className={`path-edit-btn ${editing ? 'active' : ''}`}
         onClick={() => editing ? onStopEdit() : onStartEdit()}>✎</button>
       <button className="path-delete-btn" onClick={onDelete}>✕</button>
@@ -469,16 +810,20 @@ function SymbolRow({ type, def, editing, onStartEdit, onStopEdit, onUpdate, onDe
         <div className="sym-edit-panel">
           <div className="setting-row">
             <span className="setting-label">SVG file</span>
-            <select className="sym-select" value={def.href.replace('/symbols/', '')}
-              onChange={e => onUpdate({ href: `/symbols/${e.target.value}` })}>
-              {AVAILABLE_SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <SVGPicker value={def.href.replace('/symbols/', '')} onChange={v => onUpdate({ href: `/symbols/${v}` })} />
           </div>
           <div className="setting-row">
             <span className="setting-label">Height (px)</span>
             <input className="snap-input" type="number" min="1" max="60" step="0.5"
               value={def.displayH}
               onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) onUpdate({ displayH: v }) }} />
+          </div>
+          <div className="setting-row">
+            <span className="setting-label">Orientation</span>
+            <input className="snap-input" type="number" min="-360" max="360" step="45"
+              value={def.orientation ?? 0}
+              onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onUpdate({ orientation: v }) }} />
+            <span className="setting-unit">°</span>
           </div>
         </div>
       )}

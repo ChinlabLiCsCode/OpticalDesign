@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import JSZip from 'jszip'
 import OpticalCanvas from './components/OpticalCanvas'
 import Sidebar from './components/Sidebar'
 import { DEFAULT_SYMBOL_DEFS } from './components/ElementShape'
@@ -9,7 +10,7 @@ import {
 } from './utils/csvUtils'
 import './App.css'
 
-const DEFAULT_CONFIG = { table_length: 48, table_width: 36, origin_x: 24, origin_y: 18 }
+const DEFAULT_CONFIG = { table_length: 55, table_width: 85, origin_x: 0, origin_y: 0 }
 
 async function triggerSave(blob, suggestedName, mimeType, ext) {
   if ('showSaveFilePicker' in window) {
@@ -29,96 +30,252 @@ async function triggerSave(blob, suggestedName, mimeType, ext) {
   URL.revokeObjectURL(url)
 }
 
+function loadLocalState() {
+  try {
+    const raw = localStorage.getItem('optDesign_v1')
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch { return null }
+}
+
 export default function App() {
-  const [elements,     setElements]     = useState([])
-  const [config,       setConfig]       = useState(DEFAULT_CONFIG)
-  const [beamPaths,    setBeamPaths]    = useState({})
-  const [visiblePaths, setVisiblePaths] = useState({})
-  const [bgGroups,     setBgGroups]     = useState({})
-  const [visibleBg,    setVisibleBg]    = useState({})
+  const _ls = useMemo(() => loadLocalState(), [])
+
+  const [elements,     setElements]     = useState(() => _ls?.elements     ?? [])
+  const [config,       setConfig]       = useState(() => _ls?.config ? { ...DEFAULT_CONFIG, ..._ls.config } : DEFAULT_CONFIG)
+  const [beamPaths,    setBeamPaths]    = useState(() => _ls?.beamPaths    ?? {})
+  const [visiblePaths, setVisiblePaths] = useState(() => _ls?.visiblePaths ?? {})
+  const [bgGroups,     setBgGroups]     = useState(() => _ls?.bgGroups     ?? {})
+  const [visibleBg,    setVisibleBg]    = useState(() => _ls?.visibleBg    ?? {})
   const [error,        setError]        = useState(null)
 
-  const [selectedLabel, setSelectedLabel] = useState(null)
-  const [overrides,  setOverrides]  = useState({})
+  const [selectedLabels, setSelectedLabels] = useState(() => new Set())
+  const [overrides,  setOverrides]  = useState(() => _ls?.overrides  ?? {})
   const [history,    setHistory]    = useState([])
   const [editingPath,    setEditingPath]    = useState(null)
   const [editingBgGroup, setEditingBgGroup] = useState(null)
 
-  const [symbolDefs, setSymbolDefs] = useState(() => ({ ...DEFAULT_SYMBOL_DEFS }))
+  const [symbolDefs, setSymbolDefs] = useState(() => _ls?.symbolDefs ?? { ...DEFAULT_SYMBOL_DEFS })
 
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState(() => _ls?.settings ?? {
     snapSpacing:   0.5,
     showONumber:   true,
     showType:      false,
-    darkMode:      true,
+    darkMode:      false,
     gridLineWidth: 0.5,
     scale:         10,
-    showCoords:    false,
+    showCoords:    true,
+    uiFontSize:    12,
   })
 
+  const [searchOpen,  setSearchOpen]  = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const [addElemAt,    setAddElemAt]    = useState(null)
+  const [sidebarWidth, setSidebarWidth] = useState(() => _ls?.sidebarWidth ?? 280)
+
+  const searchInputRef   = useRef(null)
+  const cursorPosRef     = useRef({ x: 0, y: 0 })
   const canvasRef        = useRef(null)
   const elemFileRef      = useRef(null)
   const pathFileRef      = useRef(null)
   const bgFileRef        = useRef(null)
   const settingsFileRef  = useRef(null)
+  const zipFileRef       = useRef(null)
+  const lastAddedTypeRef = useRef('')
+  const persistTimer     = useRef(null)
+
+  // Persist state to localStorage (debounced)
+  useEffect(() => {
+    clearTimeout(persistTimer.current)
+    persistTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem('optDesign_v1', JSON.stringify({
+          elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg,
+          settings, config, symbolDefs, sidebarWidth,
+        }))
+      } catch {}
+    }, 800)
+  }, [elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg, settings, config, symbolDefs, sidebarWidth])
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.darkMode ? 'dark' : 'light'
   }, [settings.darkMode])
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const effectiveElements = useMemo(() =>
-    elements
-      .filter(el => !overrides[el.label]?.deleted)
-      .map(el => {
-        const ov = overrides[el.label]
-        return ov ? { ...el, ...ov, deleted: undefined } : el
-      }),
+  // All elements with overrides merged — used for the sidebar list (includes hidden)
+  const allMergedElements = useMemo(() =>
+    elements.map(el => {
+      const ov = overrides[el.label]
+      return ov ? { ...el, ...ov } : el
+    }),
     [elements, overrides]
   )
 
-  const selectedElement = useMemo(
-    () => effectiveElements.find(el => el.label === selectedLabel) ?? null,
-    [effectiveElements, selectedLabel]
+  // Only elements with in_design !== false — rendered on canvas
+  const effectiveElements = useMemo(() =>
+    allMergedElements.filter(el => el.in_design !== false),
+    [allMergedElements]
   )
 
-  // ── Element edit helpers ───────────────────────────────────────────────────
-  function startEdit()  { setHistory(h => [...h, overrides]) }
+  const searchHighlights = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!searchOpen || !q) return null
+    const hits = new Set()
+    effectiveElements.forEach(el => {
+      if (el.label.toLowerCase().includes(q) || (el.type || '').toLowerCase().includes(q))
+        hits.add(el.label)
+    })
+    return hits
+  }, [searchOpen, searchQuery, effectiveElements])
 
-  function updateEdit(label, patch) {
-    setOverrides(ov => ({ ...ov, [label]: { ...(ov[label] ?? {}), ...patch } }))
-  }
+  const selectedElement = useMemo(() => {
+    const primary = [...selectedLabels][0] ?? null
+    return allMergedElements.find(el => el.label === primary) ?? null
+  }, [allMergedElements, selectedLabels])
 
-  function deleteElement(label) {
-    setHistory(h => [...h, overrides])
-    setOverrides(ov => ({ ...ov, [label]: { ...(ov[label] ?? {}), deleted: true } }))
-    setSelectedLabel(null)
+  const allMetaKeys = useMemo(() => {
+    const coreKeys = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design', 'Setup Location'])
+    const keys = []; const seen = new Set()
+    elements.forEach(el => Object.keys(el).forEach(k => {
+      if (!coreKeys.has(k) && !seen.has(k)) { seen.add(k); keys.push(k) }
+    }))
+    return keys
+  }, [elements])
+
+  // ── Unified history ────────────────────────────────────────────────────────
+  // Each entry snapshots all three mutable data layers.
+  const MAX_HISTORY = 100
+
+  function pushHistory() {
+    setHistory(h => [...h.slice(-(MAX_HISTORY - 1)), { elements, overrides, beamPaths, bgGroups }])
   }
 
   function undo() {
-    setHistory(h => {
-      if (!h.length) return h
-      const prev = h[h.length - 1]
-      setOverrides(prev)
-      return h.slice(0, -1)
-    })
+    if (!history.length) return
+    const prev = history[history.length - 1]
+    setElements(prev.elements)
+    setOverrides(prev.overrides)
+    setBeamPaths(prev.beamPaths)
+    setBgGroups(prev.bgGroups)
+    setHistory(h => h.slice(0, -1))
+  }
+
+  function handleSelectLabel(label, shiftKey) {
+    if (label === null) { setSelectedLabels(new Set()); return }
+    if (shiftKey) {
+      setSelectedLabels(prev => {
+        const next = new Set(prev)
+        if (next.has(label)) next.delete(label); else next.add(label)
+        return next
+      })
+    } else {
+      setSelectedLabels(prev =>
+        prev.size === 1 && prev.has(label) ? new Set() : new Set([label])
+      )
+    }
   }
 
   useEffect(() => {
     function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+        setTimeout(() => searchInputRef.current?.focus(), 0)
+        return
+      }
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault(); undo()
       }
+      if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        const snap = settings.snapSpacing ?? 0.5
+        const rx = Math.round(cursorPosRef.current.x / snap) * snap
+        const ry = Math.round(cursorPosRef.current.y / snap) * snap
+        setAddElemAt({ x: rx, y: ry, label: nextOLabel(elements), type: lastAddedTypeRef.current || '' })
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [history, overrides])
+  }, [history])
+
+  // ── Element edit helpers ───────────────────────────────────────────────────
+  function startEdit()  { pushHistory() }
+
+  function updateEdit(label, patch) {
+    setOverrides(ov => ({ ...ov, [label]: { ...(ov[label] ?? {}), ...patch } }))
+  }
+
+  // Soft delete: set in_design=false, hides from canvas but kept in elements list
+  function deleteSelected() {
+    if (!selectedLabels.size) return
+    pushHistory()
+    setOverrides(ov => {
+      const next = { ...ov }
+      selectedLabels.forEach(label => {
+        next[label] = { ...(next[label] ?? {}), in_design: false }
+      })
+      return next
+    })
+    setSelectedLabels(new Set())
+  }
+
+  // Hard delete: remove from elements array entirely
+  function hardDeleteSelected() {
+    if (!selectedLabels.size) return
+    pushHistory()
+    setElements(els => els.filter(el => !selectedLabels.has(el.label)))
+    setOverrides(ov => {
+      const next = { ...ov }
+      selectedLabels.forEach(label => { delete next[label] })
+      return next
+    })
+    setSelectedLabels(new Set())
+  }
+
+  function nextOLabel(elems) {
+    const nums = elems.map(el => { const m = el.label.match(/^O-(\d+(?:\.\d+)?)$/); return m ? parseFloat(m[1]) : 0 })
+    return `O-${nums.length ? Math.floor(Math.max(...nums)) + 1 : 1}`
+  }
+
+  function addElement({ type, x, y, orientation = 0, label: providedLabel }) {
+    const label = providedLabel?.trim() || nextOLabel(elements)
+    lastAddedTypeRef.current = type
+    pushHistory()
+    const newEl = { label, type, x, y, orientation, in_design: true }
+    setElements(els => [...els, newEl])
+    setSelectedLabels(new Set([label]))
+  }
+
+  function updateElementField(label, key, value) {
+    pushHistory()
+    let parsed = value
+    if (key === 'x' || key === 'y' || key === 'orientation') {
+      const n = parseFloat(value); if (isNaN(n)) return; parsed = n
+    }
+    setOverrides(ov => ({ ...ov, [label]: { ...(ov[label] ?? {}), [key]: parsed } }))
+  }
+
+  useEffect(() => {
+    if (searchHighlights?.size) canvasRef.current?.centerOn(searchHighlights)
+  }, [searchHighlights])
+
+  function startSidebarResize(e) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarWidth
+    const onMove = ev => setSidebarWidth(Math.max(180, Math.min(600, startW + (startX - ev.clientX))))
+    const onUp   = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
 
   // ── Beam path helpers ──────────────────────────────────────────────────────
   function addEdge(src, dest) {
     if (!editingPath) return
+    pushHistory()
     setBeamPaths(bp => {
       const path = bp[editingPath]
       if (!path) return bp
@@ -128,6 +285,7 @@ export default function App() {
 
   function deleteEdge(edgeIndex) {
     if (!editingPath) return
+    pushHistory()
     setBeamPaths(bp => {
       const path = bp[editingPath]
       if (!path) return bp
@@ -137,11 +295,13 @@ export default function App() {
 
   function addBeamPath(name, color) {
     if (!name || beamPaths[name]) return
+    pushHistory()
     setBeamPaths(bp => ({ ...bp, [name]: { color, edges: [] } }))
     setVisiblePaths(vp => ({ ...vp, [name]: true }))
   }
 
   function deleteBeamPath(name) {
+    pushHistory()
     setBeamPaths(bp => { const n = { ...bp }; delete n[name]; return n })
     setVisiblePaths(vp => { const n = { ...vp }; delete n[name]; return n })
     if (editingPath === name) setEditingPath(null)
@@ -151,14 +311,33 @@ export default function App() {
     setBeamPaths(bp => ({ ...bp, [name]: { ...bp[name], color } }))
   }
 
+  function renameBeamPath(oldName, newName) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName || beamPaths[trimmed]) return
+    pushHistory()
+    setBeamPaths(bp => {
+      const next = {}
+      Object.entries(bp).forEach(([k, v]) => { next[k === oldName ? trimmed : k] = v })
+      return next
+    })
+    setVisiblePaths(vp => {
+      const next = {}
+      Object.entries(vp).forEach(([k, v]) => { next[k === oldName ? trimmed : k] = v })
+      return next
+    })
+    if (editingPath === oldName) setEditingPath(trimmed)
+  }
+
   // ── Background object helpers ──────────────────────────────────────────────
   function addBgGroup(name, color, strokeWidth) {
     if (!name || bgGroups[name]) return
+    pushHistory()
     setBgGroups(g => ({ ...g, [name]: { color, strokeWidth, edges: [] } }))
     setVisibleBg(v => ({ ...v, [name]: true }))
   }
 
   function deleteBgGroup(name) {
+    pushHistory()
     setBgGroups(g => { const n = { ...g }; delete n[name]; return n })
     setVisibleBg(v => { const n = { ...v }; delete n[name]; return n })
     if (editingBgGroup === name) setEditingBgGroup(null)
@@ -168,11 +347,29 @@ export default function App() {
     setBgGroups(g => ({ ...g, [name]: { ...g[name], color } }))
   }
 
+  function renameBgGroup(oldName, newName) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName || bgGroups[trimmed]) return
+    pushHistory()
+    setBgGroups(g => {
+      const next = {}
+      Object.entries(g).forEach(([k, v]) => { next[k === oldName ? trimmed : k] = v })
+      return next
+    })
+    setVisibleBg(v => {
+      const next = {}
+      Object.entries(v).forEach(([k, val]) => { next[k === oldName ? trimmed : k] = val })
+      return next
+    })
+    if (editingBgGroup === oldName) setEditingBgGroup(trimmed)
+  }
+
   function setBgGroupStroke(name, sw) {
     setBgGroups(g => ({ ...g, [name]: { ...g[name], strokeWidth: sw } }))
   }
 
   function addBgEdge(groupName, x1, y1, x2, y2) {
+    pushHistory()
     setBgGroups(g => {
       const grp = g[groupName]
       if (!grp) return g
@@ -181,6 +378,7 @@ export default function App() {
   }
 
   function deleteBgEdge(groupName, idx) {
+    pushHistory()
     setBgGroups(g => {
       const grp = g[groupName]
       if (!grp) return g
@@ -189,6 +387,7 @@ export default function App() {
   }
 
   function updateBgEdge(groupName, idx, patch) {
+    pushHistory()
     setBgGroups(g => {
       const grp = g[groupName]
       if (!grp) return g
@@ -212,6 +411,16 @@ export default function App() {
     setSymbolDefs(d => { const n = { ...d }; delete n[typeName]; return n })
   }
 
+  function renameSymbolDef(oldKey, newKey) {
+    const trimmed = newKey.trim().toLowerCase()
+    if (!trimmed || trimmed === oldKey || symbolDefs[trimmed]) return
+    setSymbolDefs(d => {
+      const next = {}
+      Object.entries(d).forEach(([k, v]) => { next[k === oldKey ? trimmed : k] = v })
+      return next
+    })
+  }
+
   // ── Settings save / load ──────────────────────────────────────────────────
   async function saveSettingsJSON() {
     const data = JSON.stringify({ settings, config, symbolDefs }, null, 2)
@@ -233,48 +442,32 @@ export default function App() {
     settingsFileRef.current.value = ''
   }
 
-  // ── Project save / load ───────────────────────────────────────────────────
+  // ── Project save / load (ZIP) ─────────────────────────────────────────────
   async function saveProject() {
-    if (!('showDirectoryPicker' in window)) {
-      setError('Project save requires Chrome or Edge (File System Access API).')
-      return
-    }
     try {
-      const dir = await window.showDirectoryPicker({ mode: 'readwrite' })
-
-      async function writeFile(name, text) {
-        const fh = await dir.getFileHandle(name, { create: true })
-        const w  = await fh.createWritable()
-        await w.write(text); await w.close()
-      }
-
-      await writeFile('settings.json', JSON.stringify({ settings, config, symbolDefs }, null, 2))
-      if (effectiveElements.length)          await writeFile('elements.csv',           serializeElementsCsv(effectiveElements, config))
-      if (Object.keys(beamPaths).length)     await writeFile('beam_paths.csv',         serializeBeamPathsCsv(beamPaths))
-      if (Object.keys(bgGroups).length)      await writeFile('background_objects.csv', serializeBgObjectsCsv(bgGroups))
+      const zip = new JSZip()
+      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs }, null, 2))
+      if (elements.length)               zip.file('elements.csv',           serializeElementsCsv(elements, overrides, config))
+      if (Object.keys(beamPaths).length) zip.file('beam_paths.csv',         serializeBeamPathsCsv(beamPaths))
+      if (Object.keys(bgGroups).length)  zip.file('background_objects.csv', serializeBgObjectsCsv(bgGroups))
+      const blob = await zip.generateAsync({ type: 'blob' })
+      await triggerSave(blob, 'project.zip', 'application/zip', 'zip')
     } catch (e) { if (e.name !== 'AbortError') setError('Save project failed: ' + e.message) }
   }
 
-  async function loadProject() {
-    if (!('showDirectoryPicker' in window)) {
-      setError('Project load requires Chrome or Edge (File System Access API).')
-      return
-    }
+  async function loadProjectZip(file) {
+    if (!file) return
     try {
-      const dir = await window.showDirectoryPicker()
-
-      async function readFile(name) {
-        try { const fh = await dir.getFileHandle(name); return await (await fh.getFile()).text() }
-        catch { return null }
+      const zip = await JSZip.loadAsync(file)
+      const readZipFile = async name => {
+        const f = zip.file(name); return f ? await f.async('string') : null
       }
-
       const [settingsText, elemText, pathsText, bgText] = await Promise.all([
-        readFile('settings.json'),
-        readFile('elements.csv'),
-        readFile('beam_paths.csv'),
-        readFile('background_objects.csv'),
+        readZipFile('settings.json'),
+        readZipFile('elements.csv'),
+        readZipFile('beam_paths.csv'),
+        readZipFile('background_objects.csv'),
       ])
-
       if (settingsText) {
         try {
           const { settings: s, config: c, symbolDefs: sd } = JSON.parse(settingsText)
@@ -283,32 +476,29 @@ export default function App() {
           if (sd) setSymbolDefs(sd)
         } catch {}
       }
-
       if (elemText) {
         const { elements: parsed, config: parsedCfg, error: err } = parseElementsCsv(elemText)
         if (!err || parsed.length) {
           setElements(parsed)
           if (parsedCfg && !settingsText) setConfig(parsedCfg)
-          setSelectedLabel(null); setOverrides({}); setHistory([])
+          setSelectedLabels(new Set()); setOverrides({}); setHistory([])
         }
       }
-
       if (pathsText) {
         const { beamPaths: parsed } = parseBeamPathsCsv(pathsText)
         setBeamPaths(parsed); setEditingPath(null)
         const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
         setVisiblePaths(vis)
       }
-
       if (bgText) {
         const { bgGroups: parsed } = parseBgObjectsCsv(bgText)
         setBgGroups(parsed); setEditingBgGroup(null)
         const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
         setVisibleBg(vis)
       }
-
       setError(null)
-    } catch (e) { if (e.name !== 'AbortError') setError('Load project failed: ' + e.message) }
+    } catch (e) { setError('Load project failed: ' + e.message) }
+    zipFileRef.current.value = ''
   }
 
   // ── File I/O ───────────────────────────────────────────────────────────────
@@ -321,7 +511,7 @@ export default function App() {
       setError(null)
       setElements(parsed)
       if (parsedCfg) setConfig(parsedCfg)
-      setSelectedLabel(null); setOverrides({}); setHistory([])
+      setSelectedLabels(new Set()); setOverrides({}); setHistory([])
     }
     reader.readAsText(file)
     elemFileRef.current.value = ''
@@ -357,7 +547,7 @@ export default function App() {
   }
 
   async function saveElementsCSV() {
-    const csv = serializeElementsCsv(effectiveElements, config)
+    const csv = serializeElementsCsv(elements, overrides, config)
     await triggerSave(new Blob([csv], { type: 'text/csv' }), 'elements.csv', 'text/csv', 'csv')
   }
 
@@ -391,9 +581,9 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-title">LiCs Optical Design</span>
+        <span className="app-title">Optical Table Designer</span>
         <div className="header-controls">
-          <button className="file-btn" onClick={loadProject}>Open Project</button>
+          <button className="file-btn" onClick={() => zipFileRef.current.click()}>Open Project</button>
           <button className="file-btn" onClick={saveProject}>Save Project</button>
           <span className="hdr-sep" />
           <button className="file-btn" onClick={() => elemFileRef.current.click()}>Load Elements</button>
@@ -415,7 +605,31 @@ export default function App() {
         </div>
       )}
 
-      <div className="app-body">
+      <div className="app-body" style={{ position: 'relative' }}>
+        {searchOpen && (
+          <div style={{
+            position: 'absolute', top: 8, right: 8, zIndex: 200,
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'var(--bg-side)', border: '1px solid var(--border-side)',
+            borderRadius: 5, padding: '4px 8px', boxShadow: '0 2px 8px #0004',
+          }}>
+            <input ref={searchInputRef}
+              className="snap-input"
+              style={{ width: 200 }}
+              placeholder="Search label or type…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery('') }
+              }} />
+            {searchHighlights && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {searchHighlights.size} match{searchHighlights.size !== 1 ? 'es' : ''}
+              </span>
+            )}
+            <button className="small-btn" onClick={() => { setSearchOpen(false); setSearchQuery('') }}>✕</button>
+          </div>
+        )}
         <OpticalCanvas
           ref={canvasRef}
           elements={effectiveElements}
@@ -424,12 +638,13 @@ export default function App() {
           bgGroups={bgGroups}
           visibleBg={visibleBg}
           config={config}
-          selectedLabel={selectedLabel}
+          selectedLabels={selectedLabels}
           selectedElement={selectedElement}
-          onSelectLabel={setSelectedLabel}
+          onSelectLabel={handleSelectLabel}
           onStartEdit={startEdit}
           onUpdateEdit={updateEdit}
-          onDeleteElement={deleteElement}
+          onDeleteSelected={deleteSelected}
+          onHardDeleteSelected={hardDeleteSelected}
           editingPath={editingPath}
           onAddEdge={addEdge}
           onDeleteEdge={deleteEdge}
@@ -440,8 +655,20 @@ export default function App() {
           onSetEditingBgGroup={setEditingBgGroup}
           symbolDefs={symbolDefs}
           settings={settings}
+          searchHighlights={searchHighlights}
+          onCursorMove={pos => { cursorPosRef.current = pos }}
+        />
+        <div
+          onMouseDown={startSidebarResize}
+          style={{
+            width: 4, flexShrink: 0, cursor: 'col-resize', zIndex: 10,
+            background: 'transparent', transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-bright)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         />
         <Sidebar
+          sidebarWidth={sidebarWidth}
           beamPaths={beamPaths}
           visiblePaths={visiblePaths}
           onToggle={togglePath}
@@ -449,7 +676,11 @@ export default function App() {
           onAddPath={addBeamPath}
           onDeletePath={deleteBeamPath}
           onSetPathColor={setPathColor}
+          onRenamePath={renameBeamPath}
+          selectedLabels={selectedLabels}
           selectedElement={selectedElement}
+          allMetaKeys={allMetaKeys}
+          onUpdateElement={updateElementField}
           editingPath={editingPath}
           onSetEditingPath={setEditingPath}
           onDeleteEdge={deleteEdge}
@@ -461,6 +692,7 @@ export default function App() {
           onDeleteBgGroup={deleteBgGroup}
           onSetBgGroupColor={setBgGroupColor}
           onSetBgGroupStroke={setBgGroupStroke}
+          onRenameBgGroup={renameBgGroup}
           editingBgGroup={editingBgGroup}
           onSetEditingBgGroup={setEditingBgGroup}
           onDeleteBgEdge={deleteBgEdge}
@@ -475,6 +707,13 @@ export default function App() {
           onAddSymbolDef={addSymbolDef}
           onUpdateSymbolDef={updateSymbolDef}
           onDeleteSymbolDef={deleteSymbolDef}
+          onRenameSymbolDef={renameSymbolDef}
+          onSelectElement={handleSelectLabel}
+          elements={allMergedElements}
+          onAddElement={addElement}
+          lastAddedTypeRef={lastAddedTypeRef}
+          addElemAt={addElemAt}
+          onAddElemAtDone={() => setAddElemAt(null)}
         />
       </div>
 
@@ -486,6 +725,8 @@ export default function App() {
         onChange={e => loadBgFile(e.target.files[0])} />
       <input ref={settingsFileRef} type="file" accept=".json" style={{ display: 'none' }}
         onChange={e => loadSettingsFile(e.target.files[0])} />
+      <input ref={zipFileRef} type="file" accept=".zip" style={{ display: 'none' }}
+        onChange={e => loadProjectZip(e.target.files[0])} />
     </div>
   )
 }

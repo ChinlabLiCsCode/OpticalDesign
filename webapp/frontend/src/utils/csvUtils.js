@@ -1,21 +1,3 @@
-export const LASER_COLORS = {
-  'li h imaging':      'magenta',
-  'li eom':            'magenta',
-  'li repump':         'lime',
-  'li mot':            'purple',
-  'cs h imaging':      'cyan',
-  'cs h img':          'cyan',
-  'li zeeman':         'red',
-  'cs zeeman':         'blue',
-  'cs mot':            'green',
-  'cs v optical pump': 'navy',
-  'cs h optical pump': 'hotpink',
-  'rsc':               'coral',
-  'otop':              'crimson',
-  'dual color':        'violet',
-  'bfl':               'cornflowerblue',
-}
-
 function parseCSVLine(line) {
   const fields = []
   let field = ''
@@ -43,6 +25,7 @@ const ELEM_COL_ALIASES = {
   'position x': 'x', 'pos x': 'x', 'x': 'x',
   'position y': 'y', 'pos y': 'y', 'y': 'y',
   'orientation': 'orientation', 'orient': 'orientation', 'angle': 'orientation',
+  'in design': 'in_design',
 }
 const REQUIRED = ['label', 'type', 'x', 'y']
 
@@ -74,7 +57,7 @@ export function parseElementsCsv(text) {
   const missing = REQUIRED.filter(k => !(k in colIdx))
   if (missing.length) return { elements: [], config, error: `Missing columns: ${missing.join(', ')}` }
 
-  const elements = []
+  let elements = []
   for (let i = 1; i < dataLines.length; i++) {
     const row = parseCSVLine(dataLines[i])
     const label = (row[colIdx.label] ?? '').trim()
@@ -86,15 +69,20 @@ export function parseElementsCsv(text) {
     if (isNaN(x) || isNaN(y)) continue
     const orientRaw = colIdx.orientation != null ? (row[colIdx.orientation] ?? '').trim() : ''
     const orientation = orientRaw ? (parseFloat(orientRaw) || 0) : 0
-    // Normalize O-numbers: strip trailing ".0", prepend "O-" if purely numeric
     const rawLabel = label.replace(/\.0$/, '')
     const normalizedLabel = /^\d+(\.\d+)?$/.test(rawLabel) ? `O-${rawLabel}` : rawLabel
     const type = (row[colIdx.type] ?? '').trim()
+    // Parse in_design: "Breadboard" (legacy Setup Location) or "TRUE" → true, everything else → false
+    let in_design = true
+    if (colIdx.in_design != null) {
+      const raw = (row[colIdx.in_design] ?? '').trim().toLowerCase()
+      in_design = raw === 'true' || raw === 'breadboard'
+    }
     const meta = {}
     extraCols.forEach(({ name, index }) => {
-      const v = (row[index] ?? '').trim(); if (v) meta[name] = v
+      meta[name] = (row[index] ?? '').trim()
     })
-    elements.push({ label: normalizedLabel, type, x, y, orientation, ...meta })
+    elements.push({ label: normalizedLabel, type, x, y, orientation, in_design, ...meta })
   }
 
   if (!config && elements.length > 0) {
@@ -103,15 +91,16 @@ export function parseElementsCsv(text) {
     config = {
       table_length: Math.ceil(Math.max(...xs) - Math.min(...xs) + 2 * pad),
       table_width:  Math.ceil(Math.max(...ys) - Math.min(...ys) + 2 * pad),
-      origin_x:     (Math.min(...xs) + Math.max(...xs)) / 2,
-      origin_y:     (Math.min(...ys) + Math.max(...ys)) / 2,
+    }
+    // Center origin so that min coordinate = 0
+    const x0 = Math.min(...xs), y0 = Math.min(...ys)
+    if (Math.abs(x0) > 0.01 || Math.abs(y0) > 0.01) {
+      elements = elements.map(el => ({ ...el, x: el.x - x0, y: el.y - y0 }))
     }
   }
 
   return { elements, config }
 }
-
-const CORE_KEYS = new Set(['label', 'type', 'x', 'y', 'orientation', 'id'])
 
 function csvEscape(val) {
   const s = String(val ?? '')
@@ -119,18 +108,34 @@ function csvEscape(val) {
     ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export function serializeElementsCsv(elements, config) {
+const CORE_KEYS = new Set(['label', 'type', 'x', 'y', 'orientation', 'id', '_softDeleted', 'in_design'])
+
+// elements: raw elements array; overrides: current overrides map; config: table config
+export function serializeElementsCsv(elements, overrides, config) {
   if (!elements.length) return ''
+
+  // Merge overrides into each element (include soft-deleted, exclude truly hard-deleted)
+  const rows = elements.map(el => {
+    const ov = overrides?.[el.label] ?? {}
+    return { ...el, ...ov, _softDeleted: undefined }
+  })
+
+  // Collect all extra keys in order (preserve order from first element seen)
   const extraKeys = []
   const seen = new Set()
-  elements.forEach(el => Object.keys(el).forEach(k => {
+  rows.forEach(el => Object.keys(el).forEach(k => {
     if (!CORE_KEYS.has(k) && !seen.has(k)) { seen.add(k); extraKeys.push(k) }
   }))
+
   const lines = []
-  if (config) lines.push(`# config: ${Object.entries(config).map(([k, v]) => `${k}=${v}`).join(',')}`)
-  lines.push(['Label', 'Type', 'Position x', 'Position y', 'Orientation', ...extraKeys].join(','))
-  elements.forEach(el => {
-    lines.push([el.label, el.type ?? '', el.x, el.y, el.orientation ?? 0,
+  if (config) {
+    const cfgParts = Object.entries(config).map(([k, v]) => `${k}=${v}`)
+    lines.push(`# config: ${cfgParts.join(',')}`)
+  }
+  lines.push(['Label', 'Type', 'Position x', 'Position y', 'Orientation', 'In Design', ...extraKeys].join(','))
+  rows.forEach(el => {
+    const inDesign = el.in_design === false ? 'FALSE' : 'TRUE'
+    lines.push([el.label, el.type ?? '', el.x, el.y, el.orientation ?? 0, inDesign,
       ...extraKeys.map(k => csvEscape(el[k] ?? ''))].join(','))
   })
   return lines.join('\n')
@@ -138,21 +143,32 @@ export function serializeElementsCsv(elements, config) {
 
 // ── Beam paths ────────────────────────────────────────────────────────────────
 //
-// CSV format: each path occupies two adjacent columns — "[Name] src" and "[Name] dest".
-// Each data row is one directed edge. Empty rows are ignored.
-//
-// Example:
-//   Li H Imaging src,Li H Imaging dest,Li MOT src,Li MOT dest
+// CSV format: optional "# colors: Name=hex,..." comment, then alternating src/dest column pairs.
+//   # colors: Li H Imaging=#ff0000,Cs MOT=#00ff00
+//   Li H Imaging src,Li H Imaging dest,Cs MOT src,Cs MOT dest
 //   O-37,O-6,O-16,O-40
-//   O-6,O-5,O-40,O-78
 
 export function parseBeamPathsCsv(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.trimStart().startsWith('#'))
+  const allLines = text.split(/\r?\n/)
+
+  // Parse optional colors comment
+  const colorMap = {}
+  const colorLine = allLines.find(l => l.trimStart().startsWith('# colors:'))
+  if (colorLine) {
+    colorLine.replace(/^.*# colors:/, '').split(',').forEach(pair => {
+      const eq = pair.indexOf('=')
+      if (eq > 0) {
+        const name = pair.slice(0, eq).trim()
+        const color = pair.slice(eq + 1).trim()
+        if (name && color) colorMap[name] = color
+      }
+    })
+  }
+
+  const lines = allLines.filter(l => l.trim() && !l.trimStart().startsWith('#'))
   if (!lines.length) return { beamPaths: {} }
 
   const headers = parseCSVLine(lines[0]).map(h => h.trim())
-
-  // Identify paths from " src" / " dest" column pairs
   const pathNames = []
   const srcIdx = {}, destIdx = {}
   headers.forEach((h, i) => {
@@ -164,7 +180,7 @@ export function parseBeamPathsCsv(text) {
   pathNames.forEach(name => {
     const si = srcIdx[name], di = destIdx[name]
     if (si == null || di == null) return
-    const color = LASER_COLORS[name.toLowerCase()] ?? 'gray'
+    const color = colorMap[name] ?? 'gray'
     const edges = []
     for (let i = 1; i < lines.length; i++) {
       const row = parseCSVLine(lines[i])
@@ -178,11 +194,29 @@ export function parseBeamPathsCsv(text) {
   return { beamPaths }
 }
 
+export function serializeBeamPathsCsv(beamPaths) {
+  const names = Object.keys(beamPaths)
+  if (!names.length) return ''
+
+  // Colors comment
+  const colorParts = names.map(n => `${n}=${beamPaths[n].color ?? 'gray'}`)
+  const colorLine = `# colors: ${colorParts.join(',')}`
+
+  const header = names.flatMap(n => [`${n} src`, `${n} dest`]).join(',')
+  const edgesPerPath = names.map(n => beamPaths[n].edges ?? [])
+  const maxRows = Math.max(...edgesPerPath.map(e => e.length), 0)
+
+  const rows = [colorLine, header]
+  for (let i = 0; i < maxRows; i++) {
+    rows.push(names.flatMap((_, pi) => {
+      const edge = edgesPerPath[pi][i]
+      return edge ? [edge[0], edge[1]] : ['', '']
+    }).join(','))
+  }
+  return rows.join('\n')
+}
+
 // ── Background objects ────────────────────────────────────────────────────────
-//
-// CSV format: one row per line segment, grouped by name.
-//   Group,Color,StrokeWidth,x1,y1,x2,y2
-//   blue outline,blue,4,-24.5,-40.5,2.5,-40.5
 
 export function parseBgObjectsCsv(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.trimStart().startsWith('#'))
@@ -226,26 +260,5 @@ export function serializeBgObjectsCsv(bgGroups) {
       rows.push([csvEscape(name), color, strokeWidth, x1, y1, x2, y2].join(','))
     })
   })
-  return rows.join('\n')
-}
-
-export function serializeBeamPathsCsv(beamPaths) {
-  const names = Object.keys(beamPaths)
-  if (!names.length) return ''
-
-  // Header: alternating src/dest column pairs
-  const header = names.flatMap(n => [`${n} src`, `${n} dest`]).join(',')
-
-  // Collect all edge rows, one path at a time
-  const edgesPerPath = names.map(n => beamPaths[n].edges ?? [])
-  const maxRows = Math.max(...edgesPerPath.map(e => e.length), 0)
-
-  const rows = [header]
-  for (let i = 0; i < maxRows; i++) {
-    rows.push(names.flatMap((_, pi) => {
-      const edge = edgesPerPath[pi][i]
-      return edge ? [edge[0], edge[1]] : ['', '']
-    }).join(','))
-  }
   return rows.join('\n')
 }

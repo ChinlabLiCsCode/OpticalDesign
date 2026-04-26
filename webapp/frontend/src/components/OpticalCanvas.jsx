@@ -11,12 +11,14 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   elements, beamPaths, visiblePaths,
   bgGroups, visibleBg,
   config,
-  selectedLabel, selectedElement,
-  onSelectLabel, onStartEdit, onUpdateEdit, onDeleteElement,
+  selectedLabels, selectedElement,
+  onSelectLabel, onStartEdit, onUpdateEdit, onDeleteSelected, onHardDeleteSelected,
   editingPath, onAddEdge, onDeleteEdge, onSetEditingPath,
   editingBgGroup, onAddBgEdge, onDeleteBgEdge, onSetEditingBgGroup,
   symbolDefs,
   settings,
+  searchHighlights,
+  onCursorMove,
 }, ref) {
   const svgRef  = useRef(null)
   const wrapRef = useRef(null)
@@ -30,9 +32,12 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   const SCALE = settings.scale ?? 10
   const theme = settings.darkMode ? DARK_THEME : LIGHT_THEME
 
-  const { origin_x, origin_y, table_length, table_width } = config
-  const minX = origin_x - table_length / 2 - PAD
-  const minY = origin_y - table_width  / 2 - PAD
+  const { table_length, table_width } = config
+  // origin_x/y = coordinate value shown at the bottom-left corner of the table
+  const origin_x = config.origin_x ?? 0
+  const origin_y = config.origin_y ?? 0
+  const minX = origin_x - PAD
+  const minY = origin_y - PAD
   const svgW = (table_length + 2 * PAD) * SCALE
   const svgH = (table_width  + 2 * PAD) * SCALE
 
@@ -60,7 +65,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
   useEffect(() => { setPendingSrc(null) }, [editingPath])
   useEffect(() => { setPendingBgPt(null) }, [editingBgGroup])
-  useEffect(() => { if (!selectedElement) setMode('select') }, [selectedElement])
+  useEffect(() => { if (!selectedLabels?.size) setMode('select') }, [selectedLabels])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -70,23 +75,46 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (pendingBgPt)   { setPendingBgPt(null); return }
-        if (pendingSrc)    { setPendingSrc(null); return }
-        if (editingBgGroup){ onSetEditingBgGroup(null); return }
-        if (editingPath)   { onSetEditingPath(null); return }
+        if (pendingBgPt)    { setPendingBgPt(null); return }
+        if (pendingSrc)     { setPendingSrc(null); return }
+        if (editingBgGroup) { onSetEditingBgGroup(null); return }
+        if (editingPath)    { onSetEditingPath(null); return }
         setMode('select'); return
       }
 
-      if (!selectedElement) return
+      if (!selectedLabels?.size) return
       if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setMode('move') }
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setMode('rotate') }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault(); onDeleteElement(selectedElement.label)
+        e.preventDefault()
+        if (e.shiftKey) onHardDeleteSelected()
+        else            onDeleteSelected()
+      }
+
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault()
+        if (mode === 'rotate') {
+          const delta = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 45 : -45
+          onStartEdit()
+          elements.filter(el => selectedLabels.has(el.label)).forEach(el => {
+            onUpdateEdit(el.label, { orientation: (el.orientation || 0) + delta })
+          })
+        } else {
+          const s = settings.snapSpacing
+          const dx = e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0
+          const dy = e.key === 'ArrowUp'   ? s  : e.key === 'ArrowDown'  ? -s : 0
+          onStartEdit()
+          elements.filter(el => selectedLabels.has(el.label)).forEach(el => {
+            onUpdateEdit(el.label, { x: el.x + dx, y: el.y + dy })
+          })
+        }
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedElement, editingPath, editingBgGroup, pendingSrc, pendingBgPt, onDeleteElement, onSetEditingPath, onSetEditingBgGroup])
+  }, [selectedLabels, selectedElement, elements, mode, editingPath, editingBgGroup,
+      pendingSrc, pendingBgPt, settings, onDeleteSelected, onHardDeleteSelected,
+      onStartEdit, onUpdateEdit, onSetEditingPath, onSetEditingBgGroup])
 
   // ── Element click / drag start ────────────────────────────────────────────
   function onElementMouseDown(e, el) {
@@ -120,23 +148,35 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       return
     }
 
-    if (mode === 'move' && el.label === selectedLabel) {
-      const svgPos = screenToSVG(e.clientX, e.clientY)
+    if (mode === 'rotate' && selectedLabels?.has(el.label)) {
       onStartEdit()
-      drag.current = {
-        type: 'move', label: el.label,
-        startSVG: svgPos, startPhys: { x: el.x, y: el.y }, hasMoved: false,
-      }
+      const startOrientations = {}
+      elements.filter(e2 => selectedLabels.has(e2.label)).forEach(e2 => {
+        startOrientations[e2.label] = e2.orientation || 0
+      })
+      const svgPos0 = screenToSVG(e.clientX, e.clientY)
+      const physX0 = svgPos0.x / SCALE + minX
+      const physY0 = (svgH - svgPos0.y) / SCALE + minY
+      const startAngle = Math.atan2(physY0 - el.y, physX0 - el.x) * 180 / Math.PI
+      drag.current = { type: 'rotate', label: el.label, startPhys: { x: el.x, y: el.y }, startOrientations, startAngle }
       return
     }
 
-    if (mode === 'rotate' && el.label === selectedLabel) {
-      onStartEdit()
-      drag.current = { type: 'rotate', label: el.label, startPhys: { x: el.x, y: el.y } }
-      return
+    // Always start a potential drag-to-move (resolved on mousemove threshold)
+    const svgPos = screenToSVG(e.clientX, e.clientY)
+    const startPositions = {}
+    // If dragging a selected element, move all selected; otherwise just this element
+    const dragLabels = selectedLabels?.has(el.label)
+      ? new Set(selectedLabels)
+      : new Set([el.label])
+    elements.filter(e2 => dragLabels.has(e2.label)).forEach(e2 => {
+      startPositions[e2.label] = { x: e2.x, y: e2.y }
+    })
+    drag.current = {
+      type: 'pendingMove', el,
+      startSVG: svgPos, startPositions,
+      dragLabels, shiftKey: e.shiftKey, hasMoved: false,
     }
-
-    onSelectLabel(el.label === selectedLabel ? null : el.label)
   }
 
   function onBgMouseDown(e) {
@@ -158,6 +198,10 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   }
 
   function onMouseMove(e) {
+    if (onCursorMove) {
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      onCursorMove(svgToPhys(svgPos, 1, true))
+    }
     if (!drag.current) return
     const { type } = drag.current
 
@@ -170,33 +214,61 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       return
     }
 
+    if (type === 'pendingMove') {
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      const dx = svgPos.x - drag.current.startSVG.x
+      const dy = svgPos.y - drag.current.startSVG.y
+      if (Math.sqrt(dx * dx + dy * dy) > 4) {
+        // Crossed threshold — commit to move
+        onStartEdit()
+        // Ensure the dragged element is selected
+        if (!selectedLabels?.has(drag.current.el.label)) {
+          onSelectLabel(drag.current.el.label, drag.current.shiftKey)
+        }
+        drag.current = { ...drag.current, type: 'move', hasMoved: true }
+        setMode('move')
+      }
+      return
+    }
+
     if (type === 'move') {
       drag.current.hasMoved = true
       const svgPos = screenToSVG(e.clientX, e.clientY)
-      let newX = drag.current.startPhys.x + (svgPos.x - drag.current.startSVG.x) / SCALE
-      let newY = drag.current.startPhys.y - (svgPos.y - drag.current.startSVG.y) / SCALE
-      if (!e.shiftKey) {
-        const s = settings.snapSpacing
-        newX = Math.round(newX / s) * s
-        newY = Math.round(newY / s) * s
-      }
-      onUpdateEdit(drag.current.label, { x: newX, y: newY })
+      const dxPhys =  (svgPos.x - drag.current.startSVG.x) / SCALE
+      const dyPhys = -(svgPos.y - drag.current.startSVG.y) / SCALE
+      Object.entries(drag.current.startPositions).forEach(([label, start]) => {
+        let newX = start.x + dxPhys
+        let newY = start.y + dyPhys
+        if (!e.shiftKey) {
+          const s = settings.snapSpacing
+          newX = Math.round(newX / s) * s
+          newY = Math.round(newY / s) * s
+        }
+        onUpdateEdit(label, { x: newX, y: newY })
+      })
       return
     }
 
     if (type === 'rotate') {
       const svgPos = screenToSVG(e.clientX, e.clientY)
-      const { startPhys } = drag.current
+      const { startPhys, startOrientations, startAngle } = drag.current
       const physX = svgPos.x / SCALE + minX
       const physY = (svgH - svgPos.y) / SCALE + minY
-      let orient = Math.atan2(physY - startPhys.y, physX - startPhys.x) * 180 / Math.PI
-      if (!e.shiftKey) orient = Math.round(orient / 45) * 45
-      onUpdateEdit(drag.current.label, { orientation: orient })
+      let currentAngle = Math.atan2(physY - startPhys.y, physX - startPhys.x) * 180 / Math.PI
+      let delta = currentAngle - startAngle
+      if (!e.shiftKey) delta = Math.round(delta / 45) * 45
+      Object.entries(startOrientations).forEach(([label, startOrient]) => {
+        onUpdateEdit(label, { orientation: startOrient + delta })
+      })
     }
   }
 
   function onMouseUp() {
-    if (drag.current?.type === 'pan' && !drag.current.hasMoved) onSelectLabel(null)
+    if (drag.current?.type === 'pan' && !drag.current.hasMoved) onSelectLabel(null, false)
+    if (drag.current?.type === 'pendingMove') {
+      // No drag threshold crossed — treat as a click
+      onSelectLabel(drag.current.el.label, drag.current.shiftKey)
+    }
     drag.current = null
   }
 
@@ -267,16 +339,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     const xStep = table_length <= 15 ? 1 : 5
     const yStep = table_width  <= 15 ? 1 : 5
 
-    const tableLeft   = px(origin_x - table_length / 2)
-    const tableRight  = px(origin_x + table_length / 2)
-    const tableBottom = py(origin_y - table_width  / 2)
-    const tableTop    = py(origin_y + table_width  / 2)
+    const tableLeft   = px(origin_x)
+    const tableRight  = px(origin_x + table_length)
+    const tableBottom = py(origin_y)
+    const tableTop    = py(origin_y + table_width)
     const labelOffX   = fontSize * 1.2
     const labelOffY   = fontSize * 1.4
 
     // X-axis: labels below the bottom table edge
-    const xStart = Math.ceil((origin_x - table_length / 2) / xStep) * xStep
-    const xEnd   = Math.floor((origin_x + table_length / 2) / xStep) * xStep
+    const xStart = Math.ceil(origin_x / xStep) * xStep
+    const xEnd   = Math.floor((origin_x + table_length) / xStep) * xStep
     for (let x = xStart; x <= xEnd; x += xStep) {
       const sx = px(x)
       labels.push(
@@ -292,8 +364,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     }
 
     // Y-axis: labels to the left of the left table edge
-    const yStart = Math.ceil((origin_y - table_width / 2) / yStep) * yStep
-    const yEnd   = Math.floor((origin_y + table_width / 2) / yStep) * yStep
+    const yStart = Math.ceil(origin_y / yStep) * yStep
+    const yEnd   = Math.floor((origin_y + table_width) / yStep) * yStep
     for (let y = yStart; y <= yEnd; y += yStep) {
       const sy = py(y)
       labels.push(
@@ -344,7 +416,21 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   // ── Expose exportPDF ──────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     exportPDF: () => exportSVGToPDF(svgRef.current, svgW, svgH),
-  }), [svgW, svgH])
+    centerOn: (labels) => {
+      const targets = elements.filter(el => labels.has(el.label))
+      if (!targets.length) return
+      // compute SVG-space bounding centre directly (avoids stale px/py closure)
+      const _px = x => (x - (config.origin_x ?? 0) + PAD) * (settings.scale ?? 10)
+      const _py = y => ((config.table_width + 2 * PAD) - (y - (config.origin_y ?? 0) + PAD)) * (settings.scale ?? 10)
+      const xs = targets.map(e => _px(e.x))
+      const ys = targets.map(e => _py(e.y))
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setTransform(t => ({ k: t.k, x: rect.width / 2 - cx * t.k, y: rect.height / 2 - cy * t.k }))
+    },
+  }), [svgW, svgH, elements, config, settings])
 
   // ── Cursor ────────────────────────────────────────────────────────────────
   const bgCursor = (editingPath || editingBgGroup)
@@ -365,7 +451,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
           <rect x={0} y={0} width={svgW} height={svgH} fill={theme.canvasBg} />
           {gridLines}
           <rect
-            x={px(origin_x - table_length / 2)} y={py(origin_y + table_width / 2)}
+            x={px(origin_x)} y={py(origin_y + table_width)}
             width={table_length * SCALE} height={table_width * SCALE}
             fill="none" stroke={theme.tableBorder} strokeWidth="2"
           />
@@ -374,7 +460,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
           <g>{renderBeamEdges()}</g>
 
           {elements.map(el => {
-            const isSel     = el.label === selectedLabel
+            const isSel     = selectedLabels?.has(el.label) ?? false
             const isPendSrc = el.label === pendingSrc
             const elColor   = beamPaths[editingPath]?.color ?? (bgGroups?.[editingBgGroup]?.color ?? '#ffffff')
             const elCursor  = (editingPath || editingBgGroup) ? 'crosshair'
@@ -386,7 +472,11 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                 onMouseDown={e => onElementMouseDown(e, el)}
                 style={{ cursor: elCursor }}
               >
-                <ElementShape type={el.type} orientation={el.orientation} selected={isSel} symbolDefs={symbolDefs} />
+                <ElementShape type={el.type} orientation={el.orientation} selected={isSel} symbolDefs={symbolDefs} dark={settings.darkMode} />
+                {searchHighlights?.has(el.label) && (
+                  <circle r={9} fill="none" stroke="#ffd700"
+                    strokeWidth={Math.max(1, 1.5 / transform.k)} opacity={0.9} />
+                )}
                 {isPendSrc && (
                   <circle r={10} fill="none" stroke={elColor}
                     strokeWidth={2} strokeDasharray="4 2" opacity={0.9} />
@@ -425,17 +515,17 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       </svg>
 
       {/* Element edit toolbar */}
-      {selectedElement && !editingPath && !editingBgGroup && (
+      {selectedLabels?.size > 0 && !editingPath && !editingBgGroup && (
         <div className="edit-toolbar">
           <button className={`tb-btn ${mode === 'select' ? 'active' : ''}`}
             onClick={() => setMode('select')} title="Select (Esc)">↖</button>
           <button className={`tb-btn ${mode === 'move' ? 'active' : ''}`}
-            onClick={() => setMode('move')} title="Move (M) · drag · Shift=free">✥ M</button>
+            onClick={() => setMode('move')} title="Move (M) · drag · arrow keys · Shift=free">✥ M</button>
           <button className={`tb-btn ${mode === 'rotate' ? 'active' : ''}`}
-            onClick={() => setMode('rotate')} title="Rotate (R) · drag · Shift=free 45°">↻ R</button>
+            onClick={() => setMode('rotate')} title="Rotate (R) · drag · arrow keys · Shift=free 45°">↻ R</button>
           <div className="tb-sep" />
           <button className="tb-btn tb-delete"
-            onClick={() => onDeleteElement(selectedElement.label)} title="Delete (Del)">✕</button>
+            onClick={() => onDeleteSelected()} title="Delete (Del)">✕</button>
         </div>
       )}
 
@@ -458,9 +548,11 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       )}
 
       {/* Element mode hint */}
-      {selectedElement && !editingPath && !editingBgGroup && mode !== 'select' && (
+      {selectedLabels?.size > 0 && !editingPath && !editingBgGroup && mode !== 'select' && (
         <div className="mode-hint">
-          {mode === 'move' ? 'Drag to move · Shift = free position' : 'Drag to rotate · Shift = free angle'}
+          {mode === 'move'
+            ? 'Drag or arrow keys to move · Shift = free position'
+            : 'Drag or arrow keys to rotate · Shift = free angle'}
         </div>
       )}
     </div>

@@ -1,0 +1,84 @@
+{
+  "settings": {
+    "snapSpacing": 0.5,
+    "showONumber": true,
+    "showType": false,
+    "darkMode": false,
+    "gridLineWidth": 0.5,
+    "scale": 10,
+    "showCoords": true
+  },
+  "config": {
+    "table_length": 55,
+    "table_width": 85
+  },
+  "symbolDefs": {
+    "lens tube": {
+      "href": "/symbols/b-lens1.svg",
+      "w": 6.418,
+      "h": 23.426,
+      "displayH": 9
+    },
+    "telescope lens tube": {
+      "href": "/symbols/b-lens1.svg",
+      "w": 6.418,
+      "h": 23.426,
+      "displayH": 11
+    },
+    "*dump*": {
+      "href": "/symbols/b-dump.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*pd*": {
+      "href": "/symbols/e-pd1.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*mirror*": {
+      "href": "/symbols/b-mir.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*pbs*": {
+      "href": "/symbols/b-bsp.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 5
+    },
+    "*waveplate*": {
+      "href": "/symbols/b-wpyel.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*hwp*": {
+      "href": "/symbols/b-wpyel.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*qwp*": {
+      "href": "/symbols/b-wpred.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*lens": {
+      "href": "/symbols/b-lens1.svg",
+      "w": 9,
+      "h": 9,
+      "displayH": 9
+    },
+    "*fiber*": {
+      "href": "/symbols/b-coupler.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11,
+      "orientation": 180
+    }
+  }
+}
