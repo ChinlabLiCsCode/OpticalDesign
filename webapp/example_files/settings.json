@@ -6,24 +6,22 @@
     "darkMode": false,
     "gridLineWidth": 0.5,
     "scale": 10,
-    "showCoords": true
+    "showCoords": true,
+    "uiFontSize": 12,
+    "showGrid": true
   },
   "config": {
     "table_length": 55,
-    "table_width": 85
+    "table_width": 85,
+    "origin_x": 0,
+    "origin_y": 0
   },
   "symbolDefs": {
-    "lens tube": {
-      "href": "/symbols/b-lens1.svg",
+    "*lens tube*": {
+      "href": "/symbols/h-lenstube.svg",
       "w": 6.418,
       "h": 23.426,
       "displayH": 9
-    },
-    "telescope lens tube": {
-      "href": "/symbols/b-lens1.svg",
-      "w": 6.418,
-      "h": 23.426,
-      "displayH": 11
     },
     "*dump*": {
       "href": "/symbols/b-dump.svg",
@@ -79,6 +77,54 @@
       "h": 11,
       "displayH": 11,
       "orientation": 180
+    },
+    "*window*": {
+      "href": "/symbols/b-bspcube.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*iris*": {
+      "href": "/symbols/h-iris.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*shutter*": {
+      "href": "/symbols/h-iris.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*beam sampler*": {
+      "href": "/symbols/b-bspcube.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*dichroic*": {
+      "href": "/symbols/b-dicgrn.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "dichroic mirror": {
+      "href": "/symbols/b-dicgrn.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*port*": {
+      "href": "/symbols/b-bspcube.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*camera*": {
+      "href": "/symbols/e-wincam.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
     }
   }
 }

@@ -20,7 +20,8 @@ body { font-family: system-ui, sans-serif; background: var(--bg-app); color: var
 
 .header-controls { display: flex; align-items: center; gap: 6px; }
 
-.file-btn {
+a.file-btn { text-decoration: none; }
+.file-btn, a.file-btn {
   background: var(--btn-bg);
   color: var(--text);
   border: 1px solid var(--btn-border);
@@ -31,12 +32,52 @@ body { font-family: system-ui, sans-serif; background: var(--bg-app); color: var
   transition: background 0.15s;
   white-space: nowrap;
 }
-.file-btn:hover:not(:disabled) { background: var(--accent); }
+.file-btn:hover:not(:disabled), a.file-btn:hover { background: var(--accent); }
 .file-btn:disabled { opacity: 0.4; cursor: default; }
 .file-btn-accent { background: var(--accent); border-color: var(--accent-bright); }
 .file-btn-accent:hover:not(:disabled) { background: var(--accent-bright); }
 
 .hdr-sep { width: 1px; height: 18px; background: var(--border-header); flex-shrink: 0; }
+
+.file-menu { position: relative; }
+
+.file-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 400;
+  min-width: 160px;
+  background: var(--bg-header);
+  border: 1px solid var(--border-header);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px #0006;
+  padding: 4px 0;
+  white-space: nowrap;
+}
+
+.file-menu-label {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-menu-sep { height: 1px; background: var(--border-header); margin: 4px 0; }
+
+.file-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.file-menu-item:hover:not(:disabled) { background: var(--accent); }
+.file-menu-item:disabled { opacity: 0.4; cursor: default; }
 
 .gen-banner {
   background: var(--bg-header);

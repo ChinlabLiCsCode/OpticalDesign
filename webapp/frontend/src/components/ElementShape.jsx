@@ -60,6 +60,10 @@ export const DEFAULT_SYMBOL_DEFS = {
 
   // Detectors
   'photodetector':        { ...PD1, displayH: 16 },
+
+  // Homemade symbols
+  'iris':      { href: '/symbols/h-iris.svg',     w: 11,     h: 28.967, displayH: 11 },
+  'lens tube': { href: '/symbols/h-lenstube.svg', w: 37.601, h: 23.428, displayH: 9  },
 }
 
 // ── Symbol lookup with glob-wildcard fallback ────────────────────────────────

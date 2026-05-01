@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import JSZip from 'jszip'
 import OpticalCanvas from './components/OpticalCanvas'
 import Sidebar from './components/Sidebar'
+import SpreadsheetModal from './components/SpreadsheetModal'
 import { DEFAULT_SYMBOL_DEFS } from './components/ElementShape'
 import {
   parseElementsCsv, serializeElementsCsv,
@@ -62,6 +63,7 @@ export default function App() {
     showONumber:   true,
     showType:      false,
     darkMode:      false,
+    showGrid:      true,
     gridLineWidth: 0.5,
     scale:         10,
     showCoords:    true,
@@ -73,6 +75,9 @@ export default function App() {
 
   const [addElemAt,    setAddElemAt]    = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => _ls?.sidebarWidth ?? 280)
+  const [fileMenuOpen, setFileMenuOpen] = useState(false)
+  const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const [viewModal,    setViewModal]    = useState(null) // 'elements' | 'paths' | 'objects'
 
   const searchInputRef   = useRef(null)
   const cursorPosRef     = useRef({ x: 0, y: 0 })
@@ -84,6 +89,8 @@ export default function App() {
   const zipFileRef       = useRef(null)
   const lastAddedTypeRef = useRef('')
   const persistTimer     = useRef(null)
+  const fileMenuRef      = useRef(null)
+  const viewMenuRef      = useRef(null)
 
   // Persist state to localStorage (debounced)
   useEffect(() => {
@@ -200,6 +207,24 @@ export default function App() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [history])
+
+  useEffect(() => {
+    if (!fileMenuOpen) return
+    function onDown(e) {
+      if (!fileMenuRef.current?.contains(e.target)) setFileMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [fileMenuOpen])
+
+  useEffect(() => {
+    if (!viewMenuOpen) return
+    function onDown(e) {
+      if (!viewMenuRef.current?.contains(e.target)) setViewMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [viewMenuOpen])
 
   // ── Element edit helpers ───────────────────────────────────────────────────
   function startEdit()  { pushHistory() }
@@ -446,7 +471,27 @@ export default function App() {
   async function saveProject() {
     try {
       const zip = new JSZip()
-      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs }, null, 2))
+
+      // Write uploaded SVGs as files; replace data URL hrefs with file paths in settings
+      const processedSymbolDefs = {}
+      const usedSlugs = new Set()
+      for (const [type, def] of Object.entries(symbolDefs)) {
+        if (def.href?.startsWith('data:')) {
+          let slug = type.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+          if (usedSlugs.has(slug)) {
+            let i = 2; while (usedSlugs.has(`${slug}_${i}`)) i++; slug = `${slug}_${i}`
+          }
+          usedSlugs.add(slug)
+          const path = `symbols/${slug}.svg`
+          const [, b64] = def.href.split(',')
+          zip.file(path, b64, { base64: true })
+          processedSymbolDefs[type] = { ...def, href: `/${path}` }
+        } else {
+          processedSymbolDefs[type] = def
+        }
+      }
+
+      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs: processedSymbolDefs }, null, 2))
       if (elements.length)               zip.file('elements.csv',           serializeElementsCsv(elements, overrides, config))
       if (Object.keys(beamPaths).length) zip.file('beam_paths.csv',         serializeBeamPathsCsv(beamPaths))
       if (Object.keys(bgGroups).length)  zip.file('background_objects.csv', serializeBgObjectsCsv(bgGroups))
@@ -459,6 +504,18 @@ export default function App() {
     if (!file) return
     try {
       const zip = await JSZip.loadAsync(file)
+
+      // Read custom SVG files from the ZIP's symbols/ folder
+      const customSvgMap = {}
+      await Promise.all(
+        Object.keys(zip.files)
+          .filter(name => name.startsWith('symbols/') && name.endsWith('.svg'))
+          .map(async name => {
+            const b64 = await zip.files[name].async('base64')
+            customSvgMap[`/${name}`] = `data:image/svg+xml;base64,${b64}`
+          })
+      )
+
       const readZipFile = async name => {
         const f = zip.file(name); return f ? await f.async('string') : null
       }
@@ -473,7 +530,16 @@ export default function App() {
           const { settings: s, config: c, symbolDefs: sd } = JSON.parse(settingsText)
           if (s)  setSettings(prev => ({ ...prev, ...s }))
           if (c)  setConfig(c)
-          if (sd) setSymbolDefs(sd)
+          if (sd) {
+            // Resolve file-path hrefs back to data URLs for custom SVGs
+            const resolved = {}
+            for (const [type, def] of Object.entries(sd)) {
+              resolved[type] = customSvgMap[def.href]
+                ? { ...def, href: customSvgMap[def.href] }
+                : def
+            }
+            setSymbolDefs(resolved)
+          }
         } catch {}
       }
       if (elemText) {
@@ -577,22 +643,273 @@ export default function App() {
     setVisibleBg(vis)
   }
 
+  // ── Spreadsheet view data ──────────────────────────────────────────────────
+  const elemRows = useMemo(() =>
+    allMergedElements.map(el => ({ ...el, _key: el.label })),
+    [allMergedElements]
+  )
+
+  const elemColumns = useMemo(() => [
+    { key: 'label',       label: 'Label',     width: 70  },
+    { key: 'type',        label: 'Type',       width: 150 },
+    { key: 'x',           label: 'X',          type: 'number', width: 60  },
+    { key: 'y',           label: 'Y',          type: 'number', width: 60  },
+    { key: 'orientation', label: 'Orient °',   type: 'number', width: 60  },
+    { key: 'in_design',   label: 'In Design',  type: 'boolean', width: 70 },
+    ...allMetaKeys.map(k => ({ key: k, label: k, width: 110, headerEditable: true })),
+  ], [allMetaKeys])
+
+  const beamPathRows = useMemo(() => {
+    const rows = []
+    Object.entries(beamPaths).sort(([a], [b]) => a.localeCompare(b)).forEach(([name, { color, edges }]) => {
+      ;(edges ?? []).forEach(([src, dest], idx) => {
+        rows.push({ _key: `${name}__${idx}`, _pathName: name, _edgeIdx: idx, name, color, src, dest })
+      })
+    })
+    return rows
+  }, [beamPaths])
+
+  const PATH_COLUMNS = [
+    { key: 'name',  label: 'Name',  width: 150, readOnly: true, dim: true },
+    { key: 'color', label: 'Color', type: 'color', width: 50, readOnly: true },
+    { key: 'src',   label: 'Src',   width: 80  },
+    { key: 'dest',  label: 'Dest',  width: 80  },
+  ]
+
+  const bgObjectRows = useMemo(() => {
+    const rows = []
+    Object.entries(bgGroups).sort(([a], [b]) => a.localeCompare(b)).forEach(([group, { color, strokeWidth, edges }]) => {
+      ;(edges ?? []).forEach(([x1, y1, x2, y2], idx) => {
+        rows.push({ _key: `${group}__${idx}`, _groupName: group, _edgeIdx: idx, group, color, strokeWidth: strokeWidth ?? 2, x1, y1, x2, y2 })
+      })
+    })
+    return rows
+  }, [bgGroups])
+
+  const BG_COLUMNS = [
+    { key: 'group',       label: 'Group',  width: 130, readOnly: true, dim: true },
+    { key: 'color',       label: 'Color',  type: 'color',  width: 50, readOnly: true },
+    { key: 'strokeWidth', label: 'Stroke', type: 'number', width: 58 },
+    { key: 'x1', label: 'x1', type: 'number', width: 70 },
+    { key: 'y1', label: 'y1', type: 'number', width: 70 },
+    { key: 'x2', label: 'x2', type: 'number', width: 70 },
+    { key: 'y2', label: 'y2', type: 'number', width: 70 },
+  ]
+
+  // ── Spreadsheet edit handlers ──────────────────────────────────────────────
+  function renameElement(oldLabel, newLabel) {
+    const trimmed = newLabel.trim()
+    if (!trimmed || trimmed === oldLabel || elements.some(el => el.label === trimmed)) return
+    pushHistory()
+    setElements(els => els.map(el => el.label === oldLabel ? { ...el, label: trimmed } : el))
+    setOverrides(ov => {
+      const n = { ...ov }
+      if (n[oldLabel]) { n[trimmed] = n[oldLabel]; delete n[oldLabel] }
+      return n
+    })
+    setSelectedLabels(prev => {
+      const next = new Set(prev)
+      if (next.has(oldLabel)) { next.delete(oldLabel); next.add(trimmed) }
+      return next
+    })
+  }
+
+  const CORE_COL_SET = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design'])
+
+  function addMetaColumn(key) {
+    const trimmed = key.trim()
+    if (!trimmed || CORE_COL_SET.has(trimmed.toLowerCase()) || allMetaKeys.includes(trimmed)) return
+    pushHistory()
+    setElements(els => els.map(el => ({ ...el, [trimmed]: el[trimmed] ?? '' })))
+  }
+
+  function renameMetaColumn(oldKey, newKey) {
+    const trimmed = newKey.trim()
+    if (!trimmed || trimmed === oldKey || CORE_COL_SET.has(trimmed.toLowerCase()) || allMetaKeys.includes(trimmed)) return
+    pushHistory()
+    setElements(els => els.map(el => {
+      if (!(oldKey in el)) return el
+      const { [oldKey]: val, ...rest } = el
+      return { ...rest, [trimmed]: val }
+    }))
+    setOverrides(ov => {
+      const n = {}
+      for (const [label, patch] of Object.entries(ov)) {
+        if (oldKey in patch) {
+          const { [oldKey]: val, ...rest } = patch
+          n[label] = { ...rest, [trimmed]: val }
+        } else {
+          n[label] = patch
+        }
+      }
+      return n
+    })
+  }
+
+  function deleteMetaColumn(key) {
+    pushHistory()
+    setElements(els => els.map(el => { const { [key]: _, ...rest } = el; return rest }))
+    setOverrides(ov => {
+      const n = {}
+      for (const [label, patch] of Object.entries(ov)) {
+        const { [key]: _, ...rest } = patch
+        n[label] = rest
+      }
+      return n
+    })
+  }
+
+  function handleElemCellChange(row, key, value) {
+    if (key === 'label') renameElement(row.label, value)
+    else updateElementField(row.label, key, value)
+  }
+
+  function handleElemDeleteRow(row) {
+    pushHistory()
+    setElements(els => els.filter(el => el.label !== row.label))
+    setOverrides(ov => { const n = { ...ov }; delete n[row.label]; return n })
+    setSelectedLabels(prev => { const next = new Set(prev); next.delete(row.label); return next })
+  }
+
+  function handleElemAddRow() {
+    const label = nextOLabel(elements)
+    const ox = config.origin_x ?? 0, oy = config.origin_y ?? 0
+    addElement({ type: '', x: Math.round((ox + config.table_length / 2) * 2) / 2, y: Math.round((oy + config.table_width / 2) * 2) / 2, label })
+  }
+
+  function handlePathCellChange(row, key, value) {
+    const { _pathName, _edgeIdx } = row
+    if (key === 'color') {
+      pushHistory()
+      setBeamPaths(bp => ({ ...bp, [_pathName]: { ...bp[_pathName], color: value } }))
+    } else if (key === 'name' && value.trim() && value.trim() !== _pathName) {
+      const trimmed = value.trim()
+      const edge = (beamPaths[_pathName]?.edges ?? [])[_edgeIdx] ?? ['', '']
+      const oldEdgesAfter = (beamPaths[_pathName]?.edges ?? []).filter((_, i) => i !== _edgeIdx)
+      const isNewPath = !beamPaths[trimmed]
+      pushHistory()
+      setBeamPaths(bp => {
+        const n = { ...bp }
+        const kept = (n[_pathName]?.edges ?? []).filter((_, i) => i !== _edgeIdx)
+        if (!kept.length) delete n[_pathName]; else n[_pathName] = { ...n[_pathName], edges: kept }
+        if (!n[trimmed]) n[trimmed] = { color: row.color, edges: [] }
+        n[trimmed] = { ...n[trimmed], edges: [...n[trimmed].edges, edge] }
+        return n
+      })
+      if (isNewPath)          setVisiblePaths(v => ({ ...v, [trimmed]: true }))
+      if (!oldEdgesAfter.length) setVisiblePaths(v => { const n = { ...v }; delete n[_pathName]; return n })
+    } else if (key === 'src' || key === 'dest') {
+      pushHistory()
+      setBeamPaths(bp => {
+        const path = bp[_pathName]
+        const edges = [...(path?.edges ?? [])]
+        const [s, d] = edges[_edgeIdx] ?? ['', '']
+        edges[_edgeIdx] = key === 'src' ? [value, d] : [s, value]
+        return { ...bp, [_pathName]: { ...path, edges } }
+      })
+    }
+  }
+
+  function handlePathDeleteRow(row) {
+    const { _pathName, _edgeIdx } = row
+    pushHistory()
+    setBeamPaths(bp => {
+      const path = bp[_pathName]
+      if (!path) return bp
+      return { ...bp, [_pathName]: { ...path, edges: (path.edges ?? []).filter((_, i) => i !== _edgeIdx) } }
+    })
+  }
+
+  function handlePathAddRow() {
+    const names = Object.keys(beamPaths).sort()
+    pushHistory()
+    if (!names.length) {
+      setBeamPaths(bp => ({ ...bp, 'New Path': { color: '#4a90d9', edges: [['', '']] } }))
+      setVisiblePaths(v => ({ ...v, 'New Path': true }))
+    } else {
+      const first = names[0]
+      setBeamPaths(bp => ({ ...bp, [first]: { ...bp[first], edges: [...(bp[first].edges ?? []), ['', '']] } }))
+    }
+  }
+
+  function handleBgCellChange(row, key, value) {
+    const { _groupName, _edgeIdx } = row
+    if (key === 'color') {
+      pushHistory(); setBgGroupColor(_groupName, value)
+    } else if (key === 'strokeWidth') {
+      pushHistory(); setBgGroupStroke(_groupName, parseFloat(value) || 1)
+    } else if (key === 'group' && value.trim() && value.trim() !== _groupName) {
+      const trimmed = value.trim()
+      const edge = (bgGroups[_groupName]?.edges ?? [])[_edgeIdx] ?? [0, 0, 0, 0]
+      const oldEdgesAfter = (bgGroups[_groupName]?.edges ?? []).filter((_, i) => i !== _edgeIdx)
+      const isNewGroup = !bgGroups[trimmed]
+      pushHistory()
+      setBgGroups(g => {
+        const n = { ...g }
+        const kept = (n[_groupName]?.edges ?? []).filter((_, i) => i !== _edgeIdx)
+        if (!kept.length) delete n[_groupName]; else n[_groupName] = { ...n[_groupName], edges: kept }
+        if (!n[trimmed]) n[trimmed] = { color: row.color, strokeWidth: row.strokeWidth, edges: [] }
+        n[trimmed] = { ...n[trimmed], edges: [...n[trimmed].edges, edge] }
+        return n
+      })
+      if (isNewGroup)           setVisibleBg(v => ({ ...v, [trimmed]: true }))
+      if (!oldEdgesAfter.length) setVisibleBg(v => { const n = { ...v }; delete n[_groupName]; return n })
+    } else if (['x1', 'y1', 'x2', 'y2'].includes(key)) {
+      updateBgEdge(_groupName, _edgeIdx, { [key]: parseFloat(value) || 0 })
+    }
+  }
+
+  function handleBgDeleteRow(row) { deleteBgEdge(row._groupName, row._edgeIdx) }
+
+  function handleBgAddRow() {
+    const names = Object.keys(bgGroups).sort()
+    if (!names.length) {
+      pushHistory()
+      setBgGroups(g => ({ ...g, 'New Group': { color: '#888888', strokeWidth: 2, edges: [[0, 0, 0, 0]] } }))
+      setVisibleBg(v => ({ ...v, 'New Group': true }))
+    } else {
+      addBgEdge(names[0], 0, 0, 0, 0)
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-title">Optical Table Designer</span>
+        <span className="app-title">👁️ Optical Table Designer</span>
         <div className="header-controls">
+          <a className="file-btn" href="https://github.com/ChinlabLiCsCode/OpticalDesign" target="_blank" rel="noreferrer">GitHub</a>
+          <div className="file-menu" ref={fileMenuRef}>
+            <button className="file-btn" onClick={() => setFileMenuOpen(o => !o)}>File ▾</button>
+            {fileMenuOpen && (
+              <div className="file-menu-dropdown">
+                <div className="file-menu-label">Load</div>
+                <button className="file-menu-item" onClick={() => { elemFileRef.current.click(); setFileMenuOpen(false) }}>Load Elements…</button>
+                <button className="file-menu-item" onClick={() => { pathFileRef.current.click(); setFileMenuOpen(false) }}>Load Paths…</button>
+                <button className="file-menu-item" onClick={() => { bgFileRef.current.click(); setFileMenuOpen(false) }}>Load Objects…</button>
+                <button className="file-menu-item" onClick={() => { settingsFileRef.current.click(); setFileMenuOpen(false) }}>Load Settings…</button>
+                <div className="file-menu-sep" />
+                <div className="file-menu-label">Save</div>
+                <button className="file-menu-item" onClick={() => { saveElementsCSV(); setFileMenuOpen(false) }} disabled={!effectiveElements.length}>Save Elements</button>
+                <button className="file-menu-item" onClick={() => { savePathsCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(beamPaths).length}>Save Paths</button>
+                <button className="file-menu-item" onClick={() => { saveBgCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(bgGroups).length}>Save Objects</button>
+                <button className="file-menu-item" onClick={() => { saveSettingsJSON(); setFileMenuOpen(false) }}>Save Settings</button>
+              </div>
+            )}
+          </div>
+          <div className="file-menu" ref={viewMenuRef}>
+            <button className="file-btn" onClick={() => setViewMenuOpen(o => !o)}>View ▾</button>
+            {viewMenuOpen && (
+              <div className="file-menu-dropdown">
+                <button className="file-menu-item" onClick={() => { setViewModal('elements'); setViewMenuOpen(false) }}>Elements</button>
+                <button className="file-menu-item" onClick={() => { setViewModal('paths'); setViewMenuOpen(false) }}>Beam Paths</button>
+                <button className="file-menu-item" onClick={() => { setViewModal('objects'); setViewMenuOpen(false) }}>Background Objects</button>
+              </div>
+            )}
+          </div>
+          <span className="hdr-sep" />
           <button className="file-btn" onClick={() => zipFileRef.current.click()}>Open Project</button>
           <button className="file-btn" onClick={saveProject}>Save Project</button>
-          <span className="hdr-sep" />
-          <button className="file-btn" onClick={() => elemFileRef.current.click()}>Load Elements</button>
-          <button className="file-btn" onClick={() => pathFileRef.current.click()}>Load Paths</button>
-          <button className="file-btn" onClick={() => bgFileRef.current.click()}>Load Objects</button>
-          <span className="hdr-sep" />
-          <button className="file-btn" onClick={saveElementsCSV} disabled={!effectiveElements.length}>Save Elements</button>
-          <button className="file-btn" onClick={savePathsCSV} disabled={!Object.keys(beamPaths).length}>Save Paths</button>
-          <button className="file-btn" onClick={saveBgCSV} disabled={!Object.keys(bgGroups).length}>Save Objects</button>
           <span className="hdr-sep" />
           <button className="file-btn file-btn-accent" onClick={handleExportPDF} disabled={!effectiveElements.length}>Export PDF</button>
         </div>
@@ -641,6 +958,7 @@ export default function App() {
           selectedLabels={selectedLabels}
           selectedElement={selectedElement}
           onSelectLabel={handleSelectLabel}
+          onSelectLabels={setSelectedLabels}
           onStartEdit={startEdit}
           onUpdateEdit={updateEdit}
           onDeleteSelected={deleteSelected}
@@ -716,6 +1034,23 @@ export default function App() {
           onAddElemAtDone={() => setAddElemAt(null)}
         />
       </div>
+
+      {viewModal === 'elements' && (
+        <SpreadsheetModal title="Elements" columns={elemColumns} rows={elemRows}
+          onCellChange={handleElemCellChange} onDeleteRow={handleElemDeleteRow} onAddRow={handleElemAddRow}
+          onRenameColumn={renameMetaColumn} onDeleteColumn={deleteMetaColumn} onAddColumn={addMetaColumn}
+          onClose={() => setViewModal(null)} />
+      )}
+      {viewModal === 'paths' && (
+        <SpreadsheetModal title="Beam Paths" columns={PATH_COLUMNS} rows={beamPathRows}
+          onCellChange={handlePathCellChange} onDeleteRow={handlePathDeleteRow} onAddRow={handlePathAddRow}
+          onClose={() => setViewModal(null)} />
+      )}
+      {viewModal === 'objects' && (
+        <SpreadsheetModal title="Background Objects" columns={BG_COLUMNS} rows={bgObjectRows}
+          onCellChange={handleBgCellChange} onDeleteRow={handleBgDeleteRow} onAddRow={handleBgAddRow}
+          onClose={() => setViewModal(null)} />
+      )}
 
       <input ref={elemFileRef} type="file" accept=".csv" style={{ display: 'none' }}
         onChange={e => loadElementsFile(e.target.files[0])} />

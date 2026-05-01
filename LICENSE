@@ -1,0 +1,45 @@
+MIT License
+
+Copyright (c) 2026 Henry Ando
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+-------------------------------------------------------------------------------
+Third-Party Attributions
+-------------------------------------------------------------------------------
+
+The SVG optical component symbols in webapp/frontend/public/symbols/ (files
+prefixed b-*, c-*, and e-*) are taken from the Component Library by
+Alexander Franzen:
+
+    https://www.gwoptics.org/ComponentLibrary/
+
+These files are licensed under the Creative Commons
+Attribution-NonCommercial 3.0 Unported License (CC BY-NC 3.0):
+
+    https://creativecommons.org/licenses/by-nc/3.0/
+
+They are reproduced here unmodified for non-commercial use in accordance
+with that license. Any use of those symbol files must comply with
+CC BY-NC 3.0, including attribution to Alexander Franzen.
+
+The homemade symbols in webapp/frontend/public/symbols/ (files prefixed h-*)
+are original works by the authors of this project and are covered by the
+MIT License above.

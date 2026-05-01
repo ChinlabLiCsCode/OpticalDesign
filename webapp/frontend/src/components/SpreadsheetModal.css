@@ -1,0 +1,161 @@
+.ss-overlay {
+  position: fixed;
+  inset: 0;
+  background: #00000077;
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-modal {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-side);
+  border-radius: 6px;
+  width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 40px #0009;
+}
+
+.ss-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-header);
+  flex-shrink: 0;
+}
+
+.ss-title { font-size: 14px; font-weight: 600; }
+
+.ss-body { overflow: auto; flex: 1; }
+
+.ss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.ss-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-header);
+  border-bottom: 2px solid var(--border-side);
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ss-table tbody tr { border-bottom: 1px solid var(--border-side)33; }
+.ss-table tbody tr:nth-child(even) { background: var(--bg-item)88; }
+.ss-table tbody tr:hover { background: var(--accent)22; }
+
+.ss-td { padding: 0; vertical-align: middle; }
+.ss-td-editable { cursor: text; }
+.ss-td-readonly { cursor: default; }
+.ss-td-center { text-align: center; padding: 0 4px; vertical-align: middle; }
+
+.ss-cell-value {
+  display: block;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 26px;
+  line-height: 18px;
+}
+
+.ss-cell-input {
+  display: block;
+  width: 100%;
+  padding: 3px 6px;
+  background: var(--accent)33;
+  border: 1px solid var(--accent-bright);
+  color: var(--text);
+  font-size: 12px;
+  font-family: monospace;
+  min-height: 26px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.ss-th-content {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.ss-th-content span { flex: 1; }
+.ss-th-editable { cursor: default; }
+.ss-th-editable:hover { color: var(--text); }
+
+.ss-col-del-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 9px;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+th:hover .ss-col-del-btn { opacity: 0.6; }
+.ss-col-del-btn:hover { opacity: 1 !important; color: #ff6b6b; }
+
+.ss-header-input {
+  width: 100%;
+  padding: 1px 4px;
+  background: var(--accent)33;
+  border: 1px solid var(--accent-bright);
+  color: var(--text);
+  font-size: 11px;
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.ss-color-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border-side);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.ss-color-swatch input[type="color"] { display: none; }
+
+.ss-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 5px;
+  opacity: 0.5;
+}
+.ss-delete-btn:hover { color: #ff6b6b; opacity: 1; }
+
+.ss-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}

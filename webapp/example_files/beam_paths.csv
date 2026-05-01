@@ -1,29 +1,142 @@
-# colors: Cs H Imaging=#e06c75,Li H Imaging=#61afef,Li EOM=#56b6c2,Li Repump=#e5c07b,Li MOT=#98c379,Cs MOT=#c678dd,Li Zeeman=#ff7043,Cs Zeeman=#26c6da,RSC=#7986cb,Cs V Optical Pump=#4db6ac,OTOP=#ffd700,Dual Color=#ef5350,BFL=#42a5f5,Cs H Optical Pump=#ff80ab
-Cs H Imaging src,Cs H Imaging dest,Li H Imaging src,Li H Imaging dest,Li EOM src,Li EOM dest,Li Repump src,Li Repump dest,Li MOT src,Li MOT dest,Cs MOT src,Cs MOT dest,Li Zeeman src,Li Zeeman dest,Cs Zeeman src,Cs Zeeman dest,RSC src,RSC dest,Cs V Optical Pump src,Cs V Optical Pump dest,OTOP src,OTOP dest,Dual Color src,Dual Color dest,BFL src,BFL dest,Cs H Optical Pump src,Cs H Optical Pump dest
-O-519,O-18,O-527,O-502,O-525,O-539,O-15,O-307,O-16,O-320,O-17,O-98,O-25,O-23,O-48,O-47,O-110,O-95,O-116,O-119,O-267,O-167,O-148,O-129,O-150,O-138,O-127,O-124
-O-18,O-540,O-502,O-505,O-539,O-59,O-307,O-90,O-320,O-40,O-98,O-250,O-23,O-2,O-47,O-3,O-95,O-149,O-321,O-309,O-167,O-162,O-129,O-145,O-138,O-11,O-124,O-126
-O-540,O-38,O-505,O-516,O-59,O-552,O-90,O-84,O-40,O-78.2,O-79.1,O-34,O-2,O-22,O-3,O-46,O-149,O-120,O-309,O-324,O-162,O-163,O-145,O-142,O-11,O-7,O-126,O-123
-O-38,O-516,O-516,O-517,O-552,O-545,,,O-78.2,O-185,O-64.1,O-93,O-22,O-20,O-46,O-43,O-120,O-5,,,O-163,O-151,O-142,O-266,O-7,O-122,O-123,O-9
-O-516,O-517,O-517,O-330,O-545,O-546,,,O-185,O-250,O-306,O-104,O-20,O-19,O-43,O-67,O-298,O-121,,,O-151,O-151,O-266,O-135,O-122,O-134,O-9,O-68
-O-517,O-330,O-330,O-531,O-546,O-64.1,,,O-320,O-105,O-104,O-315,,,O-67,O-35,O-121,O-288,,,O-151,O-152,O-135,O-257,O-134,O-139,O-68,O-41
-O-330,O-531,O-531,O-54,O-64.1,O-543,,,O-105,O-313,,,,,O-35,O-58,O-114.1,O-99,,,O-152,O-153,O-257,O-258,O-139,O-189,,
-O-531,O-54,O-54,O-53,O-543,O-544,,,O-78.2,O-76.3,,,,,,,O-99,O-109,,,O-153,O-158,O-258,O-262,O-134,O-190,,
-O-54,O-53,O-53,O-60,O-544,O-541,,,O-76.3,O-91,,,,,,,O-109,O-188,,,O-158,O-273,O-262,O-263,,,,
-O-53,O-60,O-60,O-94.2,O-541,O-60,,,O-91,O-87,,,,,,,O-188,O-250,,,O-273,O-274,O-129,O-71,,,,
-O-60,O-94.2,O-517,O-82,O-60,O-94.2,,,O-87,O-107,,,,,,,O-322,O-308,,,O-274,O-97,O-262,O-260,,,,
-O-517,O-82,O-82,O-325,O-546,O-551,,,O-107,O-69,,,,,,,O-308,O-323,,,O-97,O-86,,,,,,
-O-82,O-325,,,O-551,O-314,,,O-69,O-70,,,,,,,,,,,O-86,O-85,,,,,,
-,,,,,,,,O-76.3,O-60,,,,,,,,,,,O-85,O-80,,,,,,
-,,,,,,,,O-60,O-251,,,,,,,,,,,O-80,O-81,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-81,O-89,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-80,O-74,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-74,O-75,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-153,O-156,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-156,O-159,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-159,O-155,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-155,O-269,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-269,O-270,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-167,O-160,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-160,O-165,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-165,O-164,,,,,,
-,,,,,,,,,,,,,,,,,,,,O-164,O-268,,,,,,
+Name,Color,Src,Dest
+BFL,#42a5f5,O-150,O-138
+BFL,#42a5f5,O-138,O-11
+BFL,#42a5f5,O-11,O-7
+BFL,#42a5f5,O-7,O-122
+BFL,#42a5f5,O-122,O-134
+BFL,#42a5f5,O-134,O-139
+BFL,#42a5f5,O-139,O-189
+BFL,#42a5f5,O-134,O-190
+Cs H Imaging,#e06c75,O-519,O-18
+Cs H Imaging,#e06c75,O-18,O-540
+Cs H Imaging,#e06c75,O-540,O-38
+Cs H Imaging,#e06c75,O-38,O-516
+Cs H Imaging,#e06c75,O-516,O-517
+Cs H Imaging,#e06c75,O-517,O-330
+Cs H Imaging,#e06c75,O-330,O-531
+Cs H Imaging,#e06c75,O-531,O-54
+Cs H Imaging,#e06c75,O-54,O-53
+Cs H Imaging,#e06c75,O-53,O-60
+Cs H Imaging,#e06c75,O-60,O-94.2
+Cs H Imaging,#e06c75,O-517,O-82
+Cs H Imaging,#e06c75,O-82,O-325
+Cs H Optical Pump,#ff80ab,O-127,O-124
+Cs H Optical Pump,#ff80ab,O-124,O-126
+Cs H Optical Pump,#ff80ab,O-126,O-123
+Cs H Optical Pump,#ff80ab,O-123,O-9
+Cs H Optical Pump,#ff80ab,O-9,O-68
+Cs H Optical Pump,#ff80ab,O-68,O-41
+Cs MOT,#c678dd,O-17,O-98
+Cs MOT,#c678dd,O-98,O-250
+Cs MOT,#c678dd,O-79.1,O-34
+Cs MOT,#c678dd,O-64.1,O-93
+Cs MOT,#c678dd,O-306,O-104
+Cs MOT,#c678dd,O-104,O-315
+Cs V Optical Pump,#4db6ac,O-116,O-119
+Cs V Optical Pump,#4db6ac,O-321,O-309
+Cs V Optical Pump,#4db6ac,O-309,O-324
+Cs Zeeman,#26c6da,O-48,O-47
+Cs Zeeman,#26c6da,O-47,O-3
+Cs Zeeman,#26c6da,O-3,O-46
+Cs Zeeman,#26c6da,O-46,O-43
+Cs Zeeman,#26c6da,O-43,O-67
+Cs Zeeman,#26c6da,O-67,O-35
+Cs Zeeman,#26c6da,O-35,O-58
+Dual Color,#ef5350,O-148,O-129
+Dual Color,#ef5350,O-129,O-145
+Dual Color,#ef5350,O-145,O-142
+Dual Color,#ef5350,O-142,O-266
+Dual Color,#ef5350,O-266,O-135
+Dual Color,#ef5350,O-135,O-257
+Dual Color,#ef5350,O-257,O-258
+Dual Color,#ef5350,O-258,O-262
+Dual Color,#ef5350,O-262,O-263
+Dual Color,#ef5350,O-129,O-71
+Dual Color,#ef5350,O-262,O-260
+Li EOM,#56b6c2,O-525,O-539
+Li EOM,#56b6c2,O-539,O-59
+Li EOM,#56b6c2,O-59,O-552
+Li EOM,#56b6c2,O-552,O-545
+Li EOM,#56b6c2,O-545,O-546
+Li EOM,#56b6c2,O-546,O-64.1
+Li EOM,#56b6c2,O-64.1,O-543
+Li EOM,#56b6c2,O-543,O-544
+Li EOM,#56b6c2,O-544,O-541
+Li EOM,#56b6c2,O-541,O-60
+Li EOM,#56b6c2,O-60,O-94.2
+Li EOM,#56b6c2,O-546,O-551
+Li EOM,#56b6c2,O-551,O-314
+Li H Imaging,#61afef,O-527,O-502
+Li H Imaging,#61afef,O-502,O-505
+Li H Imaging,#61afef,O-505,O-516
+Li H Imaging,#61afef,O-516,O-517
+Li H Imaging,#61afef,O-517,O-330
+Li H Imaging,#61afef,O-330,O-531
+Li H Imaging,#61afef,O-531,O-54
+Li H Imaging,#61afef,O-54,O-53
+Li H Imaging,#61afef,O-53,O-60
+Li H Imaging,#61afef,O-60,O-94.2
+Li H Imaging,#61afef,O-517,O-82
+Li H Imaging,#61afef,O-82,O-325
+Li MOT,#98c379,O-16,O-320
+Li MOT,#98c379,O-320,O-40
+Li MOT,#98c379,O-40,O-78.2
+Li MOT,#98c379,O-78.2,O-185
+Li MOT,#98c379,O-185,O-250
+Li MOT,#98c379,O-320,O-105
+Li MOT,#98c379,O-105,O-313
+Li MOT,#98c379,O-78.2,O-76.3
+Li MOT,#98c379,O-76.3,O-91
+Li MOT,#98c379,O-91,O-87
+Li MOT,#98c379,O-87,O-107
+Li MOT,#98c379,O-107,O-69
+Li MOT,#98c379,O-69,O-70
+Li MOT,#98c379,O-76.3,O-60
+Li MOT,#98c379,O-60,O-251
+Li Repump,#e5c07b,O-15,O-307
+Li Repump,#e5c07b,O-307,O-90
+Li Repump,#e5c07b,O-90,O-84
+Li Zeeman,#ff7043,O-25,O-23
+Li Zeeman,#ff7043,O-23,O-2
+Li Zeeman,#ff7043,O-2,O-22
+Li Zeeman,#ff7043,O-22,O-20
+Li Zeeman,#ff7043,O-20,O-19
+OTOP,#ffd700,O-267,O-167
+OTOP,#ffd700,O-167,O-162
+OTOP,#ffd700,O-162,O-163
+OTOP,#ffd700,O-163,O-151
+OTOP,#ffd700,O-151,O-151
+OTOP,#ffd700,O-151,O-152
+OTOP,#ffd700,O-152,O-153
+OTOP,#ffd700,O-153,O-158
+OTOP,#ffd700,O-158,O-273
+OTOP,#ffd700,O-273,O-274
+OTOP,#ffd700,O-274,O-97
+OTOP,#ffd700,O-97,O-86
+OTOP,#ffd700,O-86,O-85
+OTOP,#ffd700,O-85,O-80
+OTOP,#ffd700,O-80,O-81
+OTOP,#ffd700,O-81,O-89
+OTOP,#ffd700,O-80,O-74
+OTOP,#ffd700,O-74,O-75
+OTOP,#ffd700,O-153,O-156
+OTOP,#ffd700,O-156,O-159
+OTOP,#ffd700,O-159,O-155
+OTOP,#ffd700,O-155,O-269
+OTOP,#ffd700,O-269,O-270
+OTOP,#ffd700,O-167,O-160
+OTOP,#ffd700,O-160,O-165
+OTOP,#ffd700,O-165,O-164
+OTOP,#ffd700,O-164,O-268
+RSC,#7986cb,O-110,O-95
+RSC,#7986cb,O-95,O-149
+RSC,#7986cb,O-149,O-120
+RSC,#7986cb,O-120,O-5
+RSC,#7986cb,O-298,O-121
+RSC,#7986cb,O-121,O-288
+RSC,#7986cb,O-114.1,O-99
+RSC,#7986cb,O-99,O-109
+RSC,#7986cb,O-109,O-188
+RSC,#7986cb,O-188,O-250
+RSC,#7986cb,O-322,O-308
+RSC,#7986cb,O-308,O-323

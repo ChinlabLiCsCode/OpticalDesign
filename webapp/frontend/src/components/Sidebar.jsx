@@ -59,6 +59,8 @@ export default function Sidebar({
   const [addingSymbol,    setAddingSymbol]    = useState(false)
   const [newSymType,      setNewSymType]      = useState('')
   const [newSymHref,      setNewSymHref]      = useState('b-mir.svg')
+  const [newSymW,         setNewSymW]         = useState(null)
+  const [newSymH,         setNewSymH]         = useState(null)
   const [newSymDisplayH,  setNewSymDisplayH]  = useState(11)
   const [editingSymType,  setEditingSymType]  = useState(null)
   const [renamingSymType, setRenamingSymType] = useState(null)
@@ -119,11 +121,18 @@ export default function Sidebar({
   function commitAddSymbol() {
     const type = newSymType.trim().toLowerCase()
     if (!type) return
-    const href = `/symbols/${newSymHref}`
-    // We don't know w/h without loading the SVG — use placeholder aspect ratio 1:1 until user adjusts
-    onAddSymbolDef(type, { href, w: newSymDisplayH, h: newSymDisplayH, displayH: newSymDisplayH })
-    setNewSymType(''); setAddingSymbol(false)
+    const isCustom = newSymHref.startsWith('data:')
+    const href = isCustom ? newSymHref : `/symbols/${newSymHref}`
+    const w = isCustom && newSymW ? newSymW : newSymDisplayH
+    const h = isCustom && newSymH ? newSymH : newSymDisplayH
+    onAddSymbolDef(type, { href, w, h, displayH: newSymDisplayH })
+    setNewSymType(''); setNewSymHref('b-mir.svg'); setNewSymW(null); setNewSymH(null); setAddingSymbol(false)
   }
+
+  // Custom entries: symbolDefs that use uploaded (data URL) SVGs
+  const customEntries = Object.entries(symbolDefs)
+    .filter(([, def]) => def.href?.startsWith('data:'))
+    .map(([type, def]) => ({ label: type, href: def.href, w: def.w, h: def.h }))
 
   return (
     <aside className="sidebar" style={{ fontSize: `${settings.uiFontSize ?? 12}px`, width: sidebarWidth ?? 280 }}>
@@ -134,6 +143,7 @@ export default function Sidebar({
         <button className={`sidebar-tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>Settings</button>
       </div>
 
+      <div className="sidebar-body">
       {/* ── Paths tab ─────────────────────────────────────────────────────── */}
       {tab === 'paths' && (
         <>
@@ -433,16 +443,6 @@ export default function Sidebar({
       {tab === 'settings' && (
         <>
           <section className="sidebar-section">
-            <div className="sidebar-section-header">
-              <span>Settings File</span>
-              <div className="toggle-all-btns">
-                <button className="small-btn" onClick={onLoadSettings}>Load</button>
-                <button className="small-btn" onClick={onSaveSettings}>Save</button>
-              </div>
-            </div>
-          </section>
-
-          <section className="sidebar-section">
             <div className="sidebar-section-header"><span>Appearance</span></div>
             <label className="setting-toggle">
               <input type="checkbox" checked={settings.darkMode}
@@ -503,7 +503,12 @@ export default function Sidebar({
 
           <section className="sidebar-section">
             <div className="sidebar-section-header"><span>Grid</span></div>
-            <div className="setting-row">
+            <label className="setting-toggle">
+              <input type="checkbox" checked={settings.showGrid !== false}
+                onChange={e => set('showGrid', e.target.checked)} />
+              <span>Show grid</span>
+            </label>
+            <div className="setting-row" style={{ marginTop: 4 }}>
               <span className="setting-label">Line width</span>
               <input className="snap-input" type="number" min="0.1" max="5" step="0.1"
                 value={settings.gridLineWidth}
@@ -575,7 +580,9 @@ export default function Sidebar({
                 </div>
                 <div className="setting-row">
                   <span className="setting-label">SVG file</span>
-                  <SVGPicker value={newSymHref} onChange={setNewSymHref} />
+                  <SVGPicker value={newSymHref}
+                    onChange={(val, meta) => { setNewSymHref(val); if (meta) { setNewSymW(meta.w); setNewSymH(meta.h) } }}
+                    customEntries={customEntries} />
                 </div>
                 <div className="setting-row">
                   <span className="setting-label">Height (px)</span>
@@ -603,12 +610,14 @@ export default function Sidebar({
                   onStopEdit={() => setEditingSymType(null)}
                   onUpdate={patch => onUpdateSymbolDef(type, patch)}
                   onDelete={() => { onDeleteSymbolDef(type); if (editingSymType === type) setEditingSymType(null) }}
+                  customEntries={customEntries}
                 />
               ))}
             </div>
           </section>
         </>
       )}
+      </div>{/* end sidebar-body */}
       {/* ── Persistent selected-element panel ──────────────────────────────── */}
       {selectedLabels?.size === 1 && selectedElement && (
         <section className="sidebar-section sidebar-selected-panel">
@@ -724,18 +733,43 @@ function CoordInput({ label, val, onChange }) {
   )
 }
 
+// ── SVG dimension parser ──────────────────────────────────────────────────────
+function parseSvgDimensions(svgText) {
+  try {
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
+    const svg = doc.documentElement
+    const vb = svg.getAttribute('viewBox')
+    if (vb) {
+      const parts = vb.trim().split(/[\s,]+/)
+      if (parts.length >= 4) {
+        const w = parseFloat(parts[2]), h = parseFloat(parts[3])
+        if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) return { w, h }
+      }
+    }
+    const w = parseFloat(svg.getAttribute('width'))
+    const h = parseFloat(svg.getAttribute('height'))
+    if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) return { w, h }
+  } catch {}
+  return { w: 24, h: 24 }
+}
+
 // ── SVG symbol picker ─────────────────────────────────────────────────────────
-function SVGPicker({ value, onChange }) {
+function SVGPicker({ value, onChange, customEntries = [] }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos]   = useState({ top: 0, left: 0 })
-  const btnRef = useRef(null)
+  const btnRef  = useRef(null)
+  const fileRef = useRef(null)
+
+  const isDataUrl = value?.startsWith('data:')
+  const previewSrc   = isDataUrl ? value : `/symbols/${value}`
+  const displayLabel = isDataUrl ? 'custom' : value
 
   function openPicker() {
-    const rect  = btnRef.current.getBoundingClientRect()
-    const popW  = 256
-    const popH  = 264
-    const top   = rect.bottom + 4 + popH > window.innerHeight ? rect.top - popH - 4 : rect.bottom + 4
-    const left  = Math.min(rect.left, window.innerWidth - popW - 8)
+    const rect = btnRef.current.getBoundingClientRect()
+    const popW = 256
+    const popH = 320
+    const top  = rect.bottom + 4 + popH > window.innerHeight ? rect.top - popH - 4 : rect.bottom + 4
+    const left = Math.min(rect.left, window.innerWidth - popW - 8)
     setPos({ top, left })
     setOpen(true)
   }
@@ -750,34 +784,75 @@ function SVGPicker({ value, onChange }) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
+  function handleUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const svgText = ev.target.result
+      const dims = parseSvgDimensions(svgText)
+      const b64 = btoa(unescape(encodeURIComponent(svgText)))
+      onChange(`data:image/svg+xml;base64,${b64}`, dims)
+      setOpen(false)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <button ref={btnRef} className="sym-select"
         style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', width: '100%', textAlign: 'left' }}
         onClick={() => open ? setOpen(false) : openPicker()}>
-        <img src={`/symbols/${value}`} className="sym-preview" style={{ width: 16, height: 16, flexShrink: 0 }} alt={value} />
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+        <img src={previewSrc} className="sym-preview" style={{ width: 16, height: 16, flexShrink: 0 }} alt={displayLabel} />
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.75em' }}>▾</span>
       </button>
       {open && (
         <div className="svg-picker-popover" style={{
           position: 'fixed', top: pos.top, left: pos.left, zIndex: 600,
-          width: 256, maxHeight: 264, overflowY: 'auto',
+          width: 256, maxHeight: 320, overflowY: 'auto',
           background: 'var(--bg-sidebar)', border: '1px solid var(--border-side)',
           borderRadius: 5, padding: 6, boxShadow: '0 4px 16px #0006',
-          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4,
         }}>
-          {AVAILABLE_SYMBOLS.map(s => (
-            <button key={s} onClick={() => { onChange(s); setOpen(false) }} title={s}
-              style={{
-                background: s === value ? 'var(--accent)' : 'var(--bg-item)',
-                border: `1px solid ${s === value ? 'var(--accent-bright)' : 'transparent'}`,
-                borderRadius: 3, padding: 4, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-              <img src={`/symbols/${s}`} className="sym-preview" style={{ width: 22, height: 22 }} alt={s} />
-            </button>
-          ))}
+          <div style={{ marginBottom: 6 }}>
+            <button className="small-btn" style={{ width: '100%' }}
+              onClick={() => fileRef.current.click()}>Upload SVG…</button>
+            <input ref={fileRef} type="file" accept=".svg,image/svg+xml" style={{ display: 'none' }}
+              onChange={handleUpload} />
+          </div>
+          {customEntries.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>Custom</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4, marginBottom: 6 }}>
+                {customEntries.map(({ label, href, w, h }) => (
+                  <button key={label} onClick={() => { onChange(href, { w, h }); setOpen(false) }} title={label}
+                    style={{
+                      background: href === value ? 'var(--accent)' : 'var(--bg-item)',
+                      border: `1px solid ${href === value ? 'var(--accent-bright)' : 'transparent'}`,
+                      borderRadius: 3, padding: 4, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                    <img src={href} className="sym-preview" style={{ width: 22, height: 22 }} alt={label} />
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>Built-in</div>
+            </>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+            {AVAILABLE_SYMBOLS.map(s => (
+              <button key={s} onClick={() => { onChange(s, null); setOpen(false) }} title={s}
+                style={{
+                  background: s === value ? 'var(--accent)' : 'var(--bg-item)',
+                  border: `1px solid ${s === value ? 'var(--accent-bright)' : 'transparent'}`,
+                  borderRadius: 3, padding: 4, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                <img src={`/symbols/${s}`} className="sym-preview" style={{ width: 22, height: 22 }} alt={s} />
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -786,7 +861,7 @@ function SVGPicker({ value, onChange }) {
 
 // ── Optics style row ──────────────────────────────────────────────────────────
 function SymbolRow({ type, def, editing, renaming, renameVal, onRenameValChange,
-    onStartRename, onCommitRename, onCancelRename, onStartEdit, onStopEdit, onUpdate, onDelete }) {
+    onStartRename, onCommitRename, onCancelRename, onStartEdit, onStopEdit, onUpdate, onDelete, customEntries }) {
   return (
     <div className={`sym-row ${editing ? 'editing' : ''}`}>
       <img className="sym-preview" src={def.href} alt={type} />
@@ -810,7 +885,19 @@ function SymbolRow({ type, def, editing, renaming, renameVal, onRenameValChange,
         <div className="sym-edit-panel">
           <div className="setting-row">
             <span className="setting-label">SVG file</span>
-            <SVGPicker value={def.href.replace('/symbols/', '')} onChange={v => onUpdate({ href: `/symbols/${v}` })} />
+            <SVGPicker
+              value={def.href?.startsWith('data:') ? def.href : def.href?.replace('/symbols/', '') ?? ''}
+              onChange={(val, meta) => {
+                if (val?.startsWith('data:')) {
+                  const patch = { href: val }
+                  if (meta) { patch.w = meta.w; patch.h = meta.h }
+                  onUpdate(patch)
+                } else {
+                  onUpdate({ href: `/symbols/${val}` })
+                }
+              }}
+              customEntries={customEntries ?? []}
+            />
           </div>
           <div className="setting-row">
             <span className="setting-label">Height (px)</span>

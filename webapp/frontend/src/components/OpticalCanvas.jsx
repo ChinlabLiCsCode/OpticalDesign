@@ -18,6 +18,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   symbolDefs,
   settings,
   searchHighlights,
+  onSelectLabels,
   onCursorMove,
 }, ref) {
   const svgRef  = useRef(null)
@@ -26,6 +27,9 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   const [mode, setMode] = useState('select')
   const [pendingSrc,   setPendingSrc]   = useState(null)
   const [pendingBgPt,  setPendingBgPt]  = useState(null)
+  const [selectionDrag, setSelectionDrag] = useState(null)
+  // selectionDrag: null | { type:'box', x1,y1,x2,y2, additive }
+  //                      | { type:'lasso', points:[{x,y}], additive }
 
   const drag = useRef(null)
 
@@ -52,6 +56,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     }
   }
 
+  function pointInPolygon(ptx, pty, pts) {
+    let inside = false
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y
+      if (((yi > pty) !== (yj > pty)) && (ptx < (xj - xi) * (pty - yi) / (yj - yi) + xi))
+        inside = !inside
+    }
+    return inside
+  }
+
   function svgToPhys(svgPos, snapSpacing, free) {
     let x = svgPos.x / SCALE + minX
     let y = (svgH - svgPos.y) / SCALE + minY
@@ -65,7 +79,10 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
   useEffect(() => { setPendingSrc(null) }, [editingPath])
   useEffect(() => { setPendingBgPt(null) }, [editingBgGroup])
-  useEffect(() => { if (!selectedLabels?.size) setMode('select') }, [selectedLabels])
+  useEffect(() => {
+    if (!selectedLabels?.size)
+      setMode(m => (m === 'boxSelect' || m === 'lasso') ? m : 'select')
+  }, [selectedLabels])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -82,6 +99,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         setMode('select'); return
       }
 
+      if (e.key === 'b' || e.key === 'B') { e.preventDefault(); setMode('boxSelect'); return }
+      if (e.key === 'l' || e.key === 'L') { e.preventDefault(); setMode('lasso'); return }
       if (!selectedLabels?.size) return
       if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setMode('move') }
       if (e.key === 'r' || e.key === 'R') { e.preventDefault(); setMode('rotate') }
@@ -194,6 +213,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       return
     }
 
+    if (mode === 'boxSelect' || mode === 'lasso') {
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      setSelectionDrag({
+        type: mode === 'boxSelect' ? 'box' : 'lasso',
+        x1: svgPos.x, y1: svgPos.y, x2: svgPos.x, y2: svgPos.y,
+        points: [svgPos], additive: e.shiftKey,
+      })
+      return
+    }
+
     drag.current = { type: 'pan', lastX: e.clientX, lastY: e.clientY, hasMoved: false }
   }
 
@@ -201,6 +230,20 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     if (onCursorMove) {
       const svgPos = screenToSVG(e.clientX, e.clientY)
       onCursorMove(svgToPhys(svgPos, 1, true))
+    }
+    if (selectionDrag) {
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      if (selectionDrag.type === 'box') {
+        setSelectionDrag(d => ({ ...d, x2: svgPos.x, y2: svgPos.y }))
+      } else {
+        setSelectionDrag(d => {
+          const last = d.points[d.points.length - 1]
+          const dxp = svgPos.x - last.x, dyp = svgPos.y - last.y
+          if (dxp * dxp + dyp * dyp < 9) return d
+          return { ...d, x2: svgPos.x, y2: svgPos.y, points: [...d.points, svgPos] }
+        })
+      }
+      return
     }
     if (!drag.current) return
     const { type } = drag.current
@@ -264,6 +307,27 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   }
 
   function onMouseUp() {
+    if (selectionDrag) {
+      const sd = selectionDrag
+      setSelectionDrag(null)
+      if (sd.type === 'box') {
+        const w = Math.abs(sd.x2 - sd.x1), h = Math.abs(sd.y2 - sd.y1)
+        if (w < 4 && h < 4) { onSelectLabel(null, false); return }
+        const [minX, maxX] = [Math.min(sd.x1, sd.x2), Math.max(sd.x1, sd.x2)]
+        const [minY, maxY] = [Math.min(sd.y1, sd.y2), Math.max(sd.y1, sd.y2)]
+        const found = new Set(elements
+          .filter(el => { const ex = px(el.x), ey = py(el.y); return ex >= minX && ex <= maxX && ey >= minY && ey <= maxY })
+          .map(el => el.label))
+        onSelectLabels(sd.additive ? new Set([...(selectedLabels ?? []), ...found]) : found)
+      } else {
+        if (sd.points.length < 4) { onSelectLabel(null, false); return }
+        const found = new Set(elements
+          .filter(el => pointInPolygon(px(el.x), py(el.y), sd.points))
+          .map(el => el.label))
+        onSelectLabels(sd.additive ? new Set([...(selectedLabels ?? []), ...found]) : found)
+      }
+      return
+    }
     if (drag.current?.type === 'pan' && !drag.current.hasMoved) onSelectLabel(null, false)
     if (drag.current?.type === 'pendingMove') {
       // No drag threshold crossed — treat as a click
@@ -435,6 +499,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   // ── Cursor ────────────────────────────────────────────────────────────────
   const bgCursor = (editingPath || editingBgGroup)
     ? 'crosshair'
+    : (mode === 'boxSelect' || mode === 'lasso') ? 'crosshair'
     : (mode === 'move' ? 'move' : mode === 'rotate' ? 'crosshair' : 'grab')
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -449,7 +514,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       <svg ref={svgRef} width="100%" height="100%" onWheel={onWheel} style={{ display: 'block' }}>
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
           <rect x={0} y={0} width={svgW} height={svgH} fill={theme.canvasBg} />
-          {gridLines}
+          {settings.showGrid !== false && gridLines}
           <rect
             x={px(origin_x)} y={py(origin_y + table_width)}
             width={table_length * SCALE} height={table_width * SCALE}
@@ -501,6 +566,29 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             )
           })}
 
+          {/* Box / lasso selection overlay */}
+          {selectionDrag?.type === 'box' && (() => {
+            const sx = Math.min(selectionDrag.x1, selectionDrag.x2)
+            const sy = Math.min(selectionDrag.y1, selectionDrag.y2)
+            const sw = Math.abs(selectionDrag.x2 - selectionDrag.x1)
+            const sh = Math.abs(selectionDrag.y2 - selectionDrag.y1)
+            return (
+              <rect x={sx} y={sy} width={sw} height={sh}
+                fill="rgba(100,160,255,0.12)" stroke="#6ab4ff"
+                strokeWidth={1 / transform.k}
+                strokeDasharray={`${4 / transform.k} ${2 / transform.k}`}
+                style={{ pointerEvents: 'none' }} />
+            )
+          })()}
+          {selectionDrag?.type === 'lasso' && selectionDrag.points.length > 1 && (
+            <polygon
+              points={selectionDrag.points.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="rgba(100,160,255,0.12)" stroke="#6ab4ff"
+              strokeWidth={1 / transform.k}
+              strokeDasharray={`${4 / transform.k} ${2 / transform.k}`}
+              style={{ pointerEvents: 'none' }} />
+          )}
+
           {/* Pending bg edge point indicator */}
           {pendingBgPt && (
             <g transform={`translate(${px(pendingBgPt.x)},${py(pendingBgPt.y)})`} style={{ pointerEvents: 'none' }}>
@@ -514,18 +602,25 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         </g>
       </svg>
 
-      {/* Element edit toolbar */}
-      {selectedLabels?.size > 0 && !editingPath && !editingBgGroup && (
+      {/* Canvas toolbar */}
+      {!editingPath && !editingBgGroup && (
         <div className="edit-toolbar">
           <button className={`tb-btn ${mode === 'select' ? 'active' : ''}`}
             onClick={() => setMode('select')} title="Select (Esc)">↖</button>
-          <button className={`tb-btn ${mode === 'move' ? 'active' : ''}`}
-            onClick={() => setMode('move')} title="Move (M) · drag · arrow keys · Shift=free">✥ M</button>
-          <button className={`tb-btn ${mode === 'rotate' ? 'active' : ''}`}
-            onClick={() => setMode('rotate')} title="Rotate (R) · drag · arrow keys · Shift=free 45°">↻ R</button>
-          <div className="tb-sep" />
-          <button className="tb-btn tb-delete"
-            onClick={() => onDeleteSelected()} title="Delete (Del)">✕</button>
+          <button className={`tb-btn ${mode === 'boxSelect' ? 'active' : ''}`}
+            onClick={() => setMode('boxSelect')} title="Box Select (B) · drag to select area">⬚ B</button>
+          <button className={`tb-btn ${mode === 'lasso' ? 'active' : ''}`}
+            onClick={() => setMode('lasso')} title="Lasso Select (L) · draw to select area">⌾ L</button>
+          {selectedLabels?.size > 0 && <>
+            <div className="tb-sep" />
+            <button className={`tb-btn ${mode === 'move' ? 'active' : ''}`}
+              onClick={() => setMode('move')} title="Move (M) · drag · arrow keys · Shift=free">✥ M</button>
+            <button className={`tb-btn ${mode === 'rotate' ? 'active' : ''}`}
+              onClick={() => setMode('rotate')} title="Rotate (R) · drag · arrow keys · Shift=free 45°">↻ R</button>
+            <div className="tb-sep" />
+            <button className="tb-btn tb-delete"
+              onClick={() => onDeleteSelected()} title="Delete (Del)">✕</button>
+          </>}
         </div>
       )}
 
@@ -547,10 +642,14 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         </div>
       )}
 
-      {/* Element mode hint */}
-      {selectedLabels?.size > 0 && !editingPath && !editingBgGroup && mode !== 'select' && (
+      {/* Mode hint */}
+      {!editingPath && !editingBgGroup && mode !== 'select' && (
         <div className="mode-hint">
-          {mode === 'move'
+          {mode === 'boxSelect'
+            ? 'Drag to box-select · Shift+drag to add to selection'
+            : mode === 'lasso'
+            ? 'Drag to lasso-select · Shift+drag to add to selection'
+            : mode === 'move'
             ? 'Drag or arrow keys to move · Shift = free position'
             : 'Drag or arrow keys to rotate · Shift = free angle'}
         </div>

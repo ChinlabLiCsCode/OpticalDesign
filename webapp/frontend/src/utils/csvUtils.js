@@ -143,15 +143,44 @@ export function serializeElementsCsv(elements, overrides, config) {
 
 // ── Beam paths ────────────────────────────────────────────────────────────────
 //
-// CSV format: optional "# colors: Name=hex,..." comment, then alternating src/dest column pairs.
-//   # colors: Li H Imaging=#ff0000,Cs MOT=#00ff00
-//   Li H Imaging src,Li H Imaging dest,Cs MOT src,Cs MOT dest
-//   O-37,O-6,O-16,O-40
+// CSV format: Name,Color,Src,Dest — one row per edge, sorted by name.
+//   Name,Color,Src,Dest
+//   Cs MOT,#e06c75,O-17,O-98
+//   Li H Imaging,#61afef,O-527,O-502
+//
+// Legacy column-pair format is still accepted on load.
 
 export function parseBeamPathsCsv(text) {
-  const allLines = text.split(/\r?\n/)
+  const allLines = text.split(/\r?\n/).filter(l => l.trim())
+  const dataLines = allLines.filter(l => !l.trimStart().startsWith('#'))
+  if (!dataLines.length) return { beamPaths: {} }
 
-  // Parse optional colors comment
+  const headers = parseCSVLine(dataLines[0]).map(h => h.trim())
+  const headersLow = headers.map(h => h.toLowerCase())
+
+  // New row-based format: Name, Color, Src, Dest
+  if (headersLow.includes('name') && headersLow.includes('src') && headersLow.includes('dest')) {
+    const ni = headersLow.indexOf('name')
+    const ci = headersLow.indexOf('color')
+    const si = headersLow.indexOf('src')
+    const di = headersLow.indexOf('dest')
+    const beamPaths = {}
+    for (let i = 1; i < dataLines.length; i++) {
+      const row = parseCSVLine(dataLines[i])
+      const name = (row[ni] ?? '').trim()
+      if (!name) continue
+      const src  = (row[si] ?? '').trim()
+      const dest = (row[di] ?? '').trim()
+      if (!src || !dest) continue
+      if (!beamPaths[name]) {
+        beamPaths[name] = { color: ci >= 0 ? (row[ci] ?? '').trim() || 'gray' : 'gray', edges: [] }
+      }
+      beamPaths[name].edges.push([src, dest])
+    }
+    return { beamPaths }
+  }
+
+  // Legacy column-pair format: optional "# colors:" comment, alternating src/dest columns
   const colorMap = {}
   const colorLine = allLines.find(l => l.trimStart().startsWith('# colors:'))
   if (colorLine) {
@@ -164,55 +193,38 @@ export function parseBeamPathsCsv(text) {
       }
     })
   }
-
-  const lines = allLines.filter(l => l.trim() && !l.trimStart().startsWith('#'))
-  if (!lines.length) return { beamPaths: {} }
-
-  const headers = parseCSVLine(lines[0]).map(h => h.trim())
   const pathNames = []
   const srcIdx = {}, destIdx = {}
   headers.forEach((h, i) => {
     if (h.endsWith(' src'))  { const n = h.slice(0, -4).trim(); srcIdx[n]  = i; if (!pathNames.includes(n)) pathNames.push(n) }
     if (h.endsWith(' dest')) { const n = h.slice(0, -5).trim(); destIdx[n] = i; if (!pathNames.includes(n)) pathNames.push(n) }
   })
-
   const beamPaths = {}
   pathNames.forEach(name => {
     const si = srcIdx[name], di = destIdx[name]
     if (si == null || di == null) return
-    const color = colorMap[name] ?? 'gray'
     const edges = []
-    for (let i = 1; i < lines.length; i++) {
-      const row = parseCSVLine(lines[i])
+    for (let i = 1; i < dataLines.length; i++) {
+      const row = parseCSVLine(dataLines[i])
       const src  = (row[si] ?? '').trim()
       const dest = (row[di] ?? '').trim()
       if (src && dest) edges.push([src, dest])
     }
-    beamPaths[name] = { color, edges }
+    beamPaths[name] = { color: colorMap[name] ?? 'gray', edges }
   })
-
   return { beamPaths }
 }
 
 export function serializeBeamPathsCsv(beamPaths) {
-  const names = Object.keys(beamPaths)
+  const names = Object.keys(beamPaths).sort()
   if (!names.length) return ''
-
-  // Colors comment
-  const colorParts = names.map(n => `${n}=${beamPaths[n].color ?? 'gray'}`)
-  const colorLine = `# colors: ${colorParts.join(',')}`
-
-  const header = names.flatMap(n => [`${n} src`, `${n} dest`]).join(',')
-  const edgesPerPath = names.map(n => beamPaths[n].edges ?? [])
-  const maxRows = Math.max(...edgesPerPath.map(e => e.length), 0)
-
-  const rows = [colorLine, header]
-  for (let i = 0; i < maxRows; i++) {
-    rows.push(names.flatMap((_, pi) => {
-      const edge = edgesPerPath[pi][i]
-      return edge ? [edge[0], edge[1]] : ['', '']
-    }).join(','))
-  }
+  const rows = ['Name,Color,Src,Dest']
+  names.forEach(name => {
+    const { color = 'gray', edges = [] } = beamPaths[name]
+    edges.forEach(([src, dest]) => {
+      rows.push([csvEscape(name), csvEscape(color), csvEscape(src), csvEscape(dest)].join(','))
+    })
+  })
   return rows.join('\n')
 }
 

@@ -39,11 +39,20 @@ A `# config:` comment on the first line can store table dimensions and origin:
 
 ### `beam_paths.csv`
 
-Alternating `src` / `dest` column pairs, one pair per beam path. A `# colors:` comment on the first line stores per-path colours:
+One row per beam-path edge. Rows are sorted by name when saved.
+
+| Column | Description |
+|---|---|
+| Name | Beam path name |
+| Color | Hex colour |
+| Src | Source element label |
+| Dest | Destination element label |
+
 ```
-# colors: Li H Imaging=#61afef,Cs MOT=#e06c75
-Li H Imaging src,Li H Imaging dest,Cs MOT src,Cs MOT dest
-O-18,O-51,O-3,O-34
+Name,Color,Src,Dest
+Cs MOT,#e06c75,O-17,O-98
+Cs MOT,#e06c75,O-98,O-250
+Li H Imaging,#61afef,O-527,O-502
 ```
 
 ### `background_objects.csv`
@@ -78,3 +87,9 @@ The app is deployed via Netlify from this repository. Any push to `main` trigger
 ## Example files
 
 The [`webapp/example_files/`](webapp/example_files/) directory contains a sample layout that can be loaded via **Open Project** or by loading each CSV/JSON file individually using the header buttons.
+
+## Credits and license
+
+The project code and homemade symbols (`h-*.svg`) are released under the [MIT License](LICENSE).
+
+The optical component SVG symbols (`b-*`, `c-*`, `e-*`) are taken from the [Component Library](https://www.gwoptics.org/ComponentLibrary/) by Alexander Franzen, used here under the [Creative Commons Attribution-NonCommercial 3.0 Unported](https://creativecommons.org/licenses/by-nc/3.0/) license. Any use of those symbol files must comply with CC BY-NC 3.0.
