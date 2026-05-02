@@ -1,19 +1,37 @@
 import jsPDF from 'jspdf'
 import { svg2pdf } from 'svg2pdf.js'
 
+// Adobe Illustrator generates the same IDs (XMLID_1_, XMLID_2_, …) in every SVG it
+// exports. When multiple symbols are inlined into one document, those IDs collide and
+// svg2pdf uses the first gradient it finds for every reference. Fix: stamp each
+// inlined symbol instance with a unique prefix on all IDs and url() references.
+function prefixIds(el, prefix) {
+  if (el.hasAttribute('id'))
+    el.setAttribute('id', prefix + el.getAttribute('id'))
+  for (const attr of [...el.attributes]) {
+    if (attr.value.includes('url(#'))
+      el.setAttribute(attr.name, attr.value.replace(/url\(#([^)]+)\)/g, `url(#${prefix}$1)`))
+    if ((attr.name === 'href' || attr.name === 'xlink:href') && attr.value.startsWith('#'))
+      el.setAttribute(attr.name, '#' + prefix + attr.value.slice(1))
+  }
+  for (const child of el.children) prefixIds(child, prefix)
+}
+
+// Strip comment/text nodes — svg2pdf crashes on non-Element nodes (.tagName.toLowerCase()).
+// Preserve text nodes only inside <text>/<tspan>/<style> (label content + font CSS).
+function stripNonElements(el) {
+  const keepText = /^(text|tspan|style)$/i.test(el.tagName)
+  for (const child of [...el.childNodes]) {
+    if (child.nodeType === Node.ELEMENT_NODE) stripNonElements(child)
+    else if (!keepText || child.nodeType !== Node.TEXT_NODE) el.removeChild(child)
+  }
+}
+
 // Replace every <image href="*.svg"> with the symbol's inline SVG paths.
 // This produces a fully vector PDF — no rasterisation of optics symbols.
-// <defs> from each symbol (gradients, patterns) are hoisted to a root-level
-// <defs> so svg2pdf can resolve gradient references regardless of nesting depth.
 async function inlineSVGImages(rootEl) {
   const cache = {}
-
-  // Ensure there's a root <defs> for hoisted gradient/pattern definitions
-  let rootDefs = rootEl.querySelector(':scope > defs')
-  if (!rootDefs) {
-    rootDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-    rootEl.insertBefore(rootDefs, rootEl.firstChild)
-  }
+  let instanceCount = 0
 
   await Promise.all([...rootEl.querySelectorAll('image')].map(async img => {
     const href = img.getAttribute('href') || img.getAttribute('xlink:href') || ''
@@ -24,7 +42,18 @@ async function inlineSVGImages(rootEl) {
       try {
         const text = await fetch(abs).then(r => r.text())
         const doc  = new DOMParser().parseFromString(text, 'image/svg+xml')
-        cache[abs] = doc.documentElement
+        const svg  = doc.documentElement
+        // Promote stop-color/stop-opacity from style="" to presentation attributes
+        // once on first load. Browsers may strip SVG-specific CSS properties when
+        // elements are adopted from a parsed SVG document into an HTML document.
+        svg.querySelectorAll('stop').forEach(stop => {
+          const s = stop.getAttribute('style') || ''
+          const color   = s.match(/stop-color\s*:\s*([^;]+)/)?.[1]?.trim()
+          const opacity = s.match(/stop-opacity\s*:\s*([^;]+)/)?.[1]?.trim()
+          if (color)   stop.setAttribute('stop-color',   color)
+          if (opacity) stop.setAttribute('stop-opacity', opacity)
+        })
+        cache[abs] = svg
       } catch { return }
     }
 
@@ -58,17 +87,14 @@ async function inlineSVGImages(rootEl) {
     const opacity = img.getAttribute('opacity')
     if (opacity) g.setAttribute('opacity', opacity)
 
+    const prefix = `i${instanceCount++}_`
     ;[...srcSvg.childNodes]
       .filter(n => n.nodeType === Node.ELEMENT_NODE)
       .forEach(node => {
-        if (/^defs$/i.test(node.tagName)) {
-          // Hoist gradient/pattern defs to root so svg2pdf resolves url() references
-          ;[...node.childNodes]
-            .filter(n => n.nodeType === Node.ELEMENT_NODE)
-            .forEach(def => rootDefs.appendChild(def.cloneNode(true)))
-        } else {
-          g.appendChild(node.cloneNode(true))
-        }
+        const clone = node.cloneNode(true)
+        stripNonElements(clone)
+        prefixIds(clone, prefix)
+        g.appendChild(clone)
       })
     img.parentNode.replaceChild(g, img)
   }))
@@ -102,40 +128,18 @@ export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSi
   const outerG = clone.querySelector(':scope > g')
   if (outerG) outerG.removeAttribute('transform')
 
+  // Strip React comment nodes before inlining (runs on small tree; symbol SVG comments
+  // are stripped per-clone inside inlineSVGImages)
+  stripNonElements(clone)
+
   // Inline all symbol SVGs so the PDF is fully vector
   await inlineSVGImages(clone)
-
-  // Hoist all gradient/pattern paint servers to root <defs>.
-  // These SVGs define gradients directly inside <g> elements (valid SVG, but
-  // svg2pdf only resolves url() references when the target is in <defs>).
-  // appendChild moves existing nodes, so no cloning or ID patching needed.
-  let rootDefs = clone.querySelector(':scope > defs')
-  if (!rootDefs) {
-    rootDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
-    clone.insertBefore(rootDefs, clone.firstChild)
-  }
-  clone.querySelectorAll('linearGradient, radialGradient, pattern').forEach(el => {
-    if (el.parentNode !== rootDefs) rootDefs.appendChild(el)
-  })
 
   // Inject font override via embedded <style> so svg2pdf's own stylesheet parser
   // resolves 'sans-serif' -> its built-in 'helvetica' alias (case-sensitive lookup fails otherwise)
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style')
   styleEl.textContent = 'text { font-family: sans-serif }'
   clone.insertBefore(styleEl, clone.firstChild)
-
-  // svg2pdf calls .tagName.toLowerCase() on every node and crashes on non-Element
-  // nodes. React inserts comment nodes as conditional-render placeholders in the
-  // live DOM; cloneNode captures them. Strip all non-Element nodes except text
-  // nodes inside <text>/<tspan>/<style> (label content and font override CSS).
-  function stripNonElements(el) {
-    const keepText = /^(text|tspan|style)$/i.test(el.tagName)
-    for (const child of [...el.childNodes]) {
-      if (child.nodeType === Node.ELEMENT_NODE) stripNonElements(child)
-      else if (!keepText || child.nodeType !== Node.TEXT_NODE) el.removeChild(child)
-    }
-  }
-  stripNonElements(clone)
 
   // Normalise zoom-relative text sizes and offsets.
   // React stores fontSize as inline CSS (element.style.fontSize), not as a DOM attribute,
