@@ -68,6 +68,7 @@ export default function App() {
     scale:         10,
     showCoords:    true,
     uiFontSize:    12,
+    pdfFontSize:   4,
   })
 
   const [searchOpen,  setSearchOpen]  = useState(false)

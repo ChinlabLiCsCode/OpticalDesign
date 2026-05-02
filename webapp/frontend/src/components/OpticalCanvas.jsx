@@ -479,7 +479,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
   // ── Expose exportPDF ──────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
-    exportPDF: () => exportSVGToPDF(svgRef.current, svgW, svgH),
+    exportPDF: () => exportSVGToPDF(svgRef.current, svgW, svgH, transform.k, settings.pdfFontSize ?? 4),
     centerOn: (labels) => {
       const targets = elements.filter(el => labels.has(el.label))
       if (!targets.length) return

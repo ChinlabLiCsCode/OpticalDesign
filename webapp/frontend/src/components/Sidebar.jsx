@@ -562,6 +562,17 @@ export default function Sidebar({
             </label>
           </section>
 
+          <section className="sidebar-section">
+            <div className="sidebar-section-header"><span>PDF Export</span></div>
+            <div className="setting-row">
+              <span className="setting-label">Font size</span>
+              <input className="snap-input" type="number" min="1" max="20" step="0.5"
+                value={settings.pdfFontSize ?? 4}
+                onChange={e => setNum('pdfFontSize', e.target.value)} />
+              <span className="setting-unit">pt</span>
+            </div>
+          </section>
+
           {/* Optics Styles */}
           <section className="sidebar-section">
             <div className="sidebar-section-header">
