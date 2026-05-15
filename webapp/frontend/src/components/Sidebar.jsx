@@ -551,6 +551,11 @@ export default function Sidebar({
                 onChange={e => set('showType', e.target.checked)} />
               <span>Show type label</span>
             </label>
+            <label className="setting-toggle">
+              <input type="checkbox" checked={settings.showAnnotation ?? false}
+                onChange={e => set('showAnnotation', e.target.checked)} />
+              <span>Show annotation</span>
+            </label>
           </section>
 
           <section className="sidebar-section">

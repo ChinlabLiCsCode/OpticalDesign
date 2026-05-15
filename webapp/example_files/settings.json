@@ -4,11 +4,12 @@
     "showONumber": true,
     "showType": false,
     "darkMode": false,
+    "showGrid": true,
     "gridLineWidth": 0.5,
     "scale": 10,
     "showCoords": true,
     "uiFontSize": 12,
-    "showGrid": true
+    "pdfFontSize": 4
   },
   "config": {
     "table_length": 55,

@@ -546,10 +546,11 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                   <circle r={10} fill="none" stroke={elColor}
                     strokeWidth={2} strokeDasharray="4 2" opacity={0.9} />
                 )}
-                {(settings.showONumber || settings.showType) && (() => {
+                {(settings.showONumber || settings.showType || settings.showAnnotation) && (() => {
                   const parts = [
-                    settings.showONumber ? el.label : null,
-                    settings.showType    ? el.type  : null,
+                    settings.showONumber   ? el.label      : null,
+                    settings.showType      ? el.type       : null,
+                    settings.showAnnotation ? el.Annotation : null,
                   ].filter(Boolean)
                   const labelY   = Math.min(-6, -8 / transform.k)
                   const fontSize = Math.max(3, 8 / transform.k)

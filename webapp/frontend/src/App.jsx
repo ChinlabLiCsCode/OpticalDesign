@@ -59,10 +59,11 @@ export default function App() {
   const [symbolDefs, setSymbolDefs] = useState(() => _ls?.symbolDefs ?? { ...DEFAULT_SYMBOL_DEFS })
 
   const [settings, setSettings] = useState(() => _ls?.settings ?? {
-    snapSpacing:   0.5,
-    showONumber:   true,
-    showType:      false,
-    darkMode:      false,
+    snapSpacing:      0.5,
+    showONumber:      true,
+    showType:         false,
+    showAnnotation:   false,
+    darkMode:         false,
     showGrid:      true,
     gridLineWidth: 0.5,
     scale:         10,
