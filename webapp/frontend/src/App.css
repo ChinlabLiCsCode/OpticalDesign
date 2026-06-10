@@ -132,3 +132,39 @@ a.file-btn { text-decoration: none; }
   font-size: 11px; color: var(--accent-text); pointer-events: none;
   backdrop-filter: blur(4px); white-space: nowrap;
 }
+
+/* Project name badge in header */
+.project-name-badge {
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-item); border: 1px solid var(--border-side);
+  border-radius: 4px; padding: 2px 8px; max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Modal backdrop + box */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 500;
+}
+.modal-box {
+  background: var(--bg-side); border: 1px solid var(--border-side);
+  border-radius: 8px; padding: 18px; min-width: 260px; max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.modal-box-wide { min-width: 360px; }
+.modal-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+/* Project list in Open Project modal */
+.project-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.project-item { display: flex; align-items: center; gap: 6px; border-radius: 5px; }
+.project-item-current .project-item-name { border-color: var(--accent-bright); }
+.project-item-name {
+  flex: 1; display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; background: var(--bg-item); border: 1px solid var(--border-side);
+  border-radius: 4px; padding: 6px 10px; cursor: pointer; text-align: left;
+  color: var(--text);
+}
+.project-item-name:hover { border-color: var(--accent); background: var(--bg-hover); }
+.project-item-label { font-size: 13px; font-weight: 500; }
+.project-item-date  { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.project-item-del   { flex-shrink: 0; }

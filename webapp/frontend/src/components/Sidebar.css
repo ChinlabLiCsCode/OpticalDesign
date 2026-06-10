@@ -261,3 +261,19 @@
 
 /* ── Hint ── */
 .sidebar-hint { margin-top: auto; border-bottom: none; color: var(--text-faint); line-height: 1.6; font-size: 0.917em; }
+
+/* Layers list */
+.layer-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.layer-item {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 4px; border-radius: 4px; font-size: 12px;
+}
+.layer-item:hover { background: var(--bg-hover); }
+.layer-item-active { background: var(--bg-item); }
+.layer-item input[type="radio"]    { cursor: pointer; flex-shrink: 0; }
+.layer-item input[type="checkbox"] { cursor: pointer; flex-shrink: 0; }
+.layer-name { flex: 1; cursor: default; user-select: none; }
+.layer-name:hover { color: var(--accent-text); }
+.layer-rename-input { flex: 1; font-size: 12px; }
+.layer-del-btn { opacity: 0; padding: 1px 5px; }
+.layer-item:hover .layer-del-btn { opacity: 1; }

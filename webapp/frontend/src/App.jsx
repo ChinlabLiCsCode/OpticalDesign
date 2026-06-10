@@ -39,6 +39,30 @@ function loadLocalState() {
   } catch { return null }
 }
 
+function loadCurrentProjectInfo() {
+  try {
+    const raw = localStorage.getItem('optDesign_current_project')
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function loadSavedProjects() {
+  try {
+    const raw = localStorage.getItem('optDesign_projects')
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+// Merge any layer names found in elements into an existing layers map
+function syncLayersFromElements(elems, existingLayers) {
+  const updated = { ...existingLayers }
+  ;(elems ?? []).forEach(el => {
+    const name = el.Layer || 'Default'
+    if (!(name in updated)) updated[name] = true
+  })
+  return updated
+}
+
 export default function App() {
   const _ls = useMemo(() => loadLocalState(), [])
 
@@ -81,6 +105,20 @@ export default function App() {
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   const [viewModal,    setViewModal]    = useState(null) // 'elements' | 'paths' | 'objects'
 
+  const [layers,      setLayers]      = useState(() => {
+    const base = _ls?.layers ?? { Default: true }
+    return syncLayersFromElements(_ls?.elements, base)
+  })
+  const [activeLayer, setActiveLayer] = useState(() => _ls?.activeLayer ?? 'Default')
+
+  const [currentProjectId,   setCurrentProjectId]   = useState(() => loadCurrentProjectInfo()?.id   ?? null)
+  const [currentProjectName, setCurrentProjectName] = useState(() => loadCurrentProjectInfo()?.name ?? null)
+  const [projectsModalOpen,  setProjectsModalOpen]  = useState(false)
+  const [newProjPromptOpen,  setNewProjPromptOpen]  = useState(false)
+  const [newProjName,        setNewProjName]        = useState('')
+  const [saveAsPromptOpen,   setSaveAsPromptOpen]   = useState(false)
+  const [saveAsProjName,     setSaveAsProjName]     = useState('')
+
   const searchInputRef   = useRef(null)
   const cursorPosRef     = useRef({ x: 0, y: 0 })
   const canvasRef        = useRef(null)
@@ -101,11 +139,11 @@ export default function App() {
       try {
         localStorage.setItem('optDesign_v1', JSON.stringify({
           elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg,
-          settings, config, symbolDefs, sidebarWidth,
+          settings, config, symbolDefs, sidebarWidth, layers, activeLayer,
         }))
       } catch {}
     }, 800)
-  }, [elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg, settings, config, symbolDefs, sidebarWidth])
+  }, [elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg, settings, config, symbolDefs, sidebarWidth, layers, activeLayer])
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.darkMode ? 'dark' : 'light'
@@ -121,10 +159,13 @@ export default function App() {
     [elements, overrides]
   )
 
-  // Only elements with in_design !== false — rendered on canvas
+  // Only elements with in_design !== false AND whose layer is visible — rendered on canvas
   const effectiveElements = useMemo(() =>
-    allMergedElements.filter(el => el.in_design !== false),
-    [allMergedElements]
+    allMergedElements.filter(el => {
+      if (el.in_design === false) return false
+      return layers[el.Layer || 'Default'] !== false
+    }),
+    [allMergedElements, layers]
   )
 
   const searchHighlights = useMemo(() => {
@@ -144,7 +185,7 @@ export default function App() {
   }, [allMergedElements, selectedLabels])
 
   const allMetaKeys = useMemo(() => {
-    const coreKeys = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design', 'Setup Location'])
+    const coreKeys = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design', 'Setup Location', 'Layer'])
     const keys = []; const seen = new Set()
     elements.forEach(el => Object.keys(el).forEach(k => {
       if (!coreKeys.has(k) && !seen.has(k)) { seen.add(k); keys.push(k) }
@@ -271,7 +312,7 @@ export default function App() {
     const label = providedLabel?.trim() || nextOLabel(elements)
     lastAddedTypeRef.current = type
     pushHistory()
-    const newEl = { label, type, x, y, orientation, in_design: true }
+    const newEl = { label, type, x, y, orientation, in_design: true, Layer: activeLayer }
     setElements(els => [...els, newEl])
     setSelectedLabels(new Set([label]))
   }
@@ -336,6 +377,126 @@ export default function App() {
 
   function setPathColor(name, color) {
     setBeamPaths(bp => ({ ...bp, [name]: { ...bp[name], color } }))
+  }
+
+  // ── Layer helpers ──────────────────────────────────────────────────────────
+  function addLayer(name) {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed in layers) return
+    setLayers(l => ({ ...l, [trimmed]: true }))
+  }
+
+  function deleteLayer(name) {
+    if (Object.keys(layers).length <= 1) return
+    const fallback = Object.keys(layers).find(k => k !== name) || 'Default'
+    if (activeLayer === name) setActiveLayer(fallback)
+    setElements(els => els.map(el =>
+      (el.Layer || 'Default') === name ? { ...el, Layer: fallback } : el
+    ))
+    setOverrides(ov => {
+      const n = { ...ov }
+      for (const [label, patch] of Object.entries(n)) {
+        if (patch.Layer === name) n[label] = { ...patch, Layer: fallback }
+      }
+      return n
+    })
+    setLayers(l => { const n = { ...l }; delete n[name]; return n })
+  }
+
+  function setLayerVisible(name, visible) {
+    setLayers(l => ({ ...l, [name]: visible }))
+  }
+
+  function renameLayer(oldName, newName) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName || trimmed in layers) return
+    setElements(els => els.map(el =>
+      (el.Layer || 'Default') === oldName ? { ...el, Layer: trimmed } : el
+    ))
+    setOverrides(ov => {
+      const n = { ...ov }
+      for (const [label, patch] of Object.entries(n)) {
+        if (patch.Layer === oldName) n[label] = { ...patch, Layer: trimmed }
+      }
+      return n
+    })
+    setLayers(l => {
+      const n = {}
+      for (const [k, v] of Object.entries(l)) n[k === oldName ? trimmed : k] = v
+      return n
+    })
+    if (activeLayer === oldName) setActiveLayer(trimmed)
+  }
+
+  // ── Project helpers ────────────────────────────────────────────────────────
+  function captureProjectState() {
+    return { elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg,
+             settings, config, symbolDefs, sidebarWidth, layers, activeLayer }
+  }
+
+  function applyProjectState(s) {
+    if (s.elements     != null) setElements(s.elements)
+    if (s.overrides    != null) setOverrides(s.overrides)
+    if (s.beamPaths    != null) setBeamPaths(s.beamPaths)
+    if (s.bgGroups     != null) setBgGroups(s.bgGroups)
+    if (s.visiblePaths != null) setVisiblePaths(s.visiblePaths)
+    if (s.visibleBg    != null) setVisibleBg(s.visibleBg)
+    if (s.settings     != null) setSettings(prev => ({ ...prev, ...s.settings }))
+    if (s.config       != null) setConfig(s.config)
+    if (s.symbolDefs   != null) setSymbolDefs(s.symbolDefs)
+    if (s.sidebarWidth != null) setSidebarWidth(s.sidebarWidth)
+    if (s.layers       != null) setLayers(s.layers)
+    if (s.activeLayer  != null) setActiveLayer(s.activeLayer)
+    setSelectedLabels(new Set())
+    setHistory([])
+  }
+
+  function saveProjectSlot(name, id) {
+    const trimmed = name.trim() || 'Untitled'
+    const pid = id ?? crypto.randomUUID()
+    const projects = loadSavedProjects()
+    projects[pid] = { name: trimmed, savedAt: Date.now(), state: captureProjectState() }
+    localStorage.setItem('optDesign_projects', JSON.stringify(projects))
+    localStorage.setItem('optDesign_current_project', JSON.stringify({ id: pid, name: trimmed }))
+    setCurrentProjectId(pid)
+    setCurrentProjectName(trimmed)
+  }
+
+  function openProjectById(id) {
+    const projects = loadSavedProjects()
+    const project = projects[id]
+    if (!project) return
+    applyProjectState(project.state)
+    localStorage.setItem('optDesign_current_project', JSON.stringify({ id, name: project.name }))
+    setCurrentProjectId(id)
+    setCurrentProjectName(project.name)
+    setProjectsModalOpen(false)
+  }
+
+  function deleteProjectById(id) {
+    const projects = loadSavedProjects()
+    delete projects[id]
+    localStorage.setItem('optDesign_projects', JSON.stringify(projects))
+    if (currentProjectId === id) {
+      localStorage.removeItem('optDesign_current_project')
+      setCurrentProjectId(null)
+      setCurrentProjectName(null)
+    }
+  }
+
+  function startNewProject(name) {
+    const trimmed = name.trim() || 'Untitled'
+    applyProjectState({
+      elements: [], overrides: {}, beamPaths: {}, bgGroups: {},
+      visiblePaths: {}, visibleBg: {}, config: DEFAULT_CONFIG,
+      symbolDefs: { ...DEFAULT_SYMBOL_DEFS },
+      layers: { Default: true }, activeLayer: 'Default',
+    })
+    localStorage.removeItem('optDesign_current_project')
+    setCurrentProjectId(null)
+    setCurrentProjectName(trimmed)
+    setNewProjPromptOpen(false)
+    setNewProjName('')
   }
 
   function renameBeamPath(oldName, newName) {
@@ -493,12 +654,15 @@ export default function App() {
         }
       }
 
-      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs: processedSymbolDefs }, null, 2))
+      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs: processedSymbolDefs, layers, activeLayer }, null, 2))
       if (elements.length)               zip.file('elements.csv',           serializeElementsCsv(elements, overrides, config))
       if (Object.keys(beamPaths).length) zip.file('beam_paths.csv',         serializeBeamPathsCsv(beamPaths))
       if (Object.keys(bgGroups).length)  zip.file('background_objects.csv', serializeBgObjectsCsv(bgGroups))
       const blob = await zip.generateAsync({ type: 'blob' })
-      await triggerSave(blob, 'project.zip', 'application/zip', 'zip')
+      const zipName = currentProjectName
+        ? currentProjectName.replace(/[^a-z0-9_\-. ]/gi, '_').trim() + '.zip'
+        : 'project.zip'
+      await triggerSave(blob, zipName, 'application/zip', 'zip')
     } catch (e) { if (e.name !== 'AbortError') setError('Save project failed: ' + e.message) }
   }
 
@@ -527,13 +691,15 @@ export default function App() {
         readZipFile('beam_paths.csv'),
         readZipFile('background_objects.csv'),
       ])
+      let zipLayers = null, zipActiveLayer = null
       if (settingsText) {
         try {
-          const { settings: s, config: c, symbolDefs: sd } = JSON.parse(settingsText)
+          const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
           if (s)  setSettings(prev => ({ ...prev, ...s }))
           if (c)  setConfig(c)
+          if (l)  { zipLayers = l; setLayers(l) }
+          if (al) { zipActiveLayer = al; setActiveLayer(al) }
           if (sd) {
-            // Resolve file-path hrefs back to data URLs for custom SVGs
             const resolved = {}
             for (const [type, def] of Object.entries(sd)) {
               resolved[type] = customSvgMap[def.href]
@@ -549,6 +715,8 @@ export default function App() {
         if (!err || parsed.length) {
           setElements(parsed)
           if (parsedCfg && !settingsText) setConfig(parsedCfg)
+          setLayers(prev => syncLayersFromElements(parsed, zipLayers ?? prev))
+          if (!zipActiveLayer) setActiveLayer('Default')
           setSelectedLabels(new Set()); setOverrides({}); setHistory([])
         }
       }
@@ -579,6 +747,7 @@ export default function App() {
       setError(null)
       setElements(parsed)
       if (parsedCfg) setConfig(parsedCfg)
+      setLayers(prev => syncLayersFromElements(parsed, prev))
       setSelectedLabels(new Set()); setOverrides({}); setHistory([])
     }
     reader.readAsText(file)
@@ -879,6 +1048,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className="app-title">👁️ Optical Table Designer</span>
+        {currentProjectName && <span className="project-name-badge">{currentProjectName}</span>}
         <div className="header-controls">
           <a className="file-btn" href="https://github.com/ChinlabLiCsCode/OpticalDesign" target="_blank" rel="noreferrer">GitHub</a>
           <div className="file-menu" ref={fileMenuRef}>
@@ -896,6 +1066,11 @@ export default function App() {
                 <button className="file-menu-item" onClick={() => { savePathsCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(beamPaths).length}>Save Paths</button>
                 <button className="file-menu-item" onClick={() => { saveBgCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(bgGroups).length}>Save Objects</button>
                 <button className="file-menu-item" onClick={() => { saveSettingsJSON(); setFileMenuOpen(false) }}>Save Settings</button>
+                <div className="file-menu-sep" />
+                <div className="file-menu-label">Projects</div>
+                <button className="file-menu-item" onClick={() => { setNewProjName(''); setNewProjPromptOpen(true); setFileMenuOpen(false) }}>New Project…</button>
+                <button className="file-menu-item" onClick={() => { setProjectsModalOpen(true); setFileMenuOpen(false) }}>Open Project…</button>
+                <button className="file-menu-item" onClick={() => { setSaveAsProjName(currentProjectName ?? ''); setSaveAsPromptOpen(true); setFileMenuOpen(false) }}>Save Project As…</button>
               </div>
             )}
           </div>
@@ -1034,6 +1209,13 @@ export default function App() {
           lastAddedTypeRef={lastAddedTypeRef}
           addElemAt={addElemAt}
           onAddElemAtDone={() => setAddElemAt(null)}
+          layers={layers}
+          activeLayer={activeLayer}
+          onSetActiveLayer={setActiveLayer}
+          onAddLayer={addLayer}
+          onDeleteLayer={deleteLayer}
+          onSetLayerVisible={setLayerVisible}
+          onRenameLayer={renameLayer}
         />
       </div>
 
@@ -1053,6 +1235,81 @@ export default function App() {
           onCellChange={handleBgCellChange} onDeleteRow={handleBgDeleteRow} onAddRow={handleBgAddRow}
           onClose={() => setViewModal(null)} />
       )}
+
+      {/* ── New Project prompt ──────────────────────────────────────────────── */}
+      {newProjPromptOpen && (
+        <div className="modal-backdrop" onClick={() => setNewProjPromptOpen(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">New Project</div>
+            <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder="Project name"
+              value={newProjName}
+              onChange={e => setNewProjName(e.target.value)}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') startNewProject(newProjName)
+                if (e.key === 'Escape') setNewProjPromptOpen(false)
+              }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="small-btn" onClick={() => startNewProject(newProjName)}>Create</button>
+              <button className="small-btn" onClick={() => setNewProjPromptOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Save As Project prompt ───────────────────────────────────────────── */}
+      {saveAsPromptOpen && (
+        <div className="modal-backdrop" onClick={() => setSaveAsPromptOpen(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Save Project As</div>
+            <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder="Project name"
+              value={saveAsProjName}
+              onChange={e => setSaveAsProjName(e.target.value)}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') { saveProjectSlot(saveAsProjName, null); setSaveAsPromptOpen(false) }
+                if (e.key === 'Escape') setSaveAsPromptOpen(false)
+              }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="small-btn" onClick={() => { saveProjectSlot(saveAsProjName, null); setSaveAsPromptOpen(false) }}>Save</button>
+              <button className="small-btn" onClick={() => setSaveAsPromptOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Open Project modal ───────────────────────────────────────────────── */}
+      {projectsModalOpen && (() => {
+        const projects = loadSavedProjects()
+        const entries = Object.entries(projects).sort(([, a], [, b]) => b.savedAt - a.savedAt)
+        return (
+          <div className="modal-backdrop" onClick={() => setProjectsModalOpen(false)}>
+            <div className="modal-box modal-box-wide" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Open Project</div>
+              {entries.length === 0
+                ? <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '8px 0' }}>No saved projects.</p>
+                : (
+                  <ul className="project-list">
+                    {entries.map(([id, proj]) => (
+                      <li key={id} className={`project-item ${id === currentProjectId ? 'project-item-current' : ''}`}>
+                        <button className="project-item-name" onClick={() => openProjectById(id)}>
+                          <span className="project-item-label">{proj.name}</span>
+                          <span className="project-item-date">{new Date(proj.savedAt).toLocaleString()}</span>
+                        </button>
+                        <button className="small-btn project-item-del" title="Delete"
+                          onClick={() => deleteProjectById(id)}>✕</button>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              }
+              <button className="small-btn" style={{ marginTop: 8 }} onClick={() => setProjectsModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        )
+      })()}
 
       <input ref={elemFileRef} type="file" accept=".csv" style={{ display: 'none' }}
         onChange={e => loadElementsFile(e.target.files[0])} />

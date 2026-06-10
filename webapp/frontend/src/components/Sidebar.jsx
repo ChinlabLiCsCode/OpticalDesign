@@ -34,6 +34,9 @@ export default function Sidebar({
   elements, onSelectElement,
   onAddElement, lastAddedTypeRef,
   addElemAt, onAddElemAtDone,
+  // Layers
+  layers, activeLayer,
+  onSetActiveLayer, onAddLayer, onDeleteLayer, onSetLayerVisible, onRenameLayer,
   sidebarWidth,
 }) {
   const [tab, setTab] = useState('paths')
@@ -72,6 +75,12 @@ export default function Sidebar({
   const [newElemLabel,  setNewElemLabel]  = useState('')
   const [newElemX,      setNewElemX]      = useState(null)
   const [newElemY,      setNewElemY]      = useState(null)
+
+  // Layers
+  const [addingLayer,    setAddingLayer]    = useState(false)
+  const [newLayerName,   setNewLayerName]   = useState('')
+  const [renamingLayer,  setRenamingLayer]  = useState(null)
+  const [renameLayerVal, setRenameLayerVal] = useState('')
 
   // Triggered by N key from canvas
   useEffect(() => {
@@ -285,6 +294,56 @@ export default function Sidebar({
                 </div>
               )
             })()}
+          </section>
+
+          <section className="sidebar-section">
+            <div className="sidebar-section-header">
+              <span>Layers</span>
+              <button className="small-btn" onClick={() => { setAddingLayer(p => !p); setNewLayerName('') }}>+</button>
+            </div>
+            {addingLayer && (
+              <div className="add-group-form">
+                <input className="snap-input add-name-input" placeholder="Layer name"
+                  value={newLayerName} onChange={e => setNewLayerName(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { onAddLayer(newLayerName); setAddingLayer(false); setNewLayerName('') }
+                    if (e.key === 'Escape') setAddingLayer(false)
+                  }} />
+                <button className="small-btn" onClick={() => { onAddLayer(newLayerName); setAddingLayer(false); setNewLayerName('') }}>Add</button>
+                <button className="small-btn" onClick={() => setAddingLayer(false)}>✕</button>
+              </div>
+            )}
+            <ul className="layer-list">
+              {Object.entries(layers ?? {}).map(([name, visible]) => (
+                <li key={name} className={`layer-item ${name === activeLayer ? 'layer-item-active' : ''}`}>
+                  <input type="radio" name="activeLayer" checked={name === activeLayer}
+                    onChange={() => onSetActiveLayer(name)}
+                    title="Set as active layer" />
+                  <input type="checkbox" checked={visible !== false}
+                    onChange={e => onSetLayerVisible(name, e.target.checked)}
+                    title="Toggle visibility" />
+                  {renamingLayer === name
+                    ? <input className="snap-input layer-rename-input"
+                        value={renameLayerVal}
+                        autoFocus
+                        onChange={e => setRenameLayerVal(e.target.value)}
+                        onBlur={() => { onRenameLayer(name, renameLayerVal); setRenamingLayer(null) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { onRenameLayer(name, renameLayerVal); setRenamingLayer(null) }
+                          if (e.key === 'Escape') setRenamingLayer(null)
+                        }} />
+                    : <span className="layer-name"
+                        onDoubleClick={() => { setRenamingLayer(name); setRenameLayerVal(name) }}>
+                        {name}
+                      </span>
+                  }
+                  {Object.keys(layers).length > 1 && (
+                    <button className="small-btn layer-del-btn" onClick={() => onDeleteLayer(name)} title="Delete layer">✕</button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </section>
 
           <section className="sidebar-section" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
