@@ -725,6 +725,18 @@ export default function Sidebar({
                       style={{ accentColor: 'var(--accent-bright)', cursor: 'pointer' }} />
                   </td>
                 </tr>
+                <tr>
+                  <td>Layer</td>
+                  <td>
+                    <select className="snap-input" style={{ width: '100%', fontSize: 11 }}
+                      value={selectedElement.Layer || 'Default'}
+                      onChange={e => onUpdateElement(selectedElement.label, 'Layer', e.target.value)}>
+                      {Object.keys(layers ?? {}).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
                 {(allMetaKeys ?? []).map(k => (
                   <tr key={k}>
                     <td>{k}</td>

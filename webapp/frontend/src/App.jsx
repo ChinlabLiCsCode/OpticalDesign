@@ -827,6 +827,7 @@ export default function App() {
     { key: 'y',           label: 'Y',          type: 'number', width: 60  },
     { key: 'orientation', label: 'Orient °',   type: 'number', width: 60  },
     { key: 'in_design',   label: 'In Design',  type: 'boolean', width: 70 },
+    { key: 'Layer',       label: 'Layer',       width: 100 },
     ...allMetaKeys.map(k => ({ key: k, label: k, width: 110, headerEditable: true })),
   ], [allMetaKeys])
 
