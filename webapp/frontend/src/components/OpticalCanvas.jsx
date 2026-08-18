@@ -4,6 +4,11 @@ import { exportSVGToPDF } from '../utils/pdfExport'
 
 const PAD = 2
 
+// Fallback perpendicular gap (in SVG units) between beams sharing an element pair,
+// used when a project's settings predate the `beamSpacing` setting. Scales with zoom
+// along with the rest of the canvas, matching beam stroke width.
+const DEFAULT_BEAM_SPACING = 1
+
 const DARK_THEME  = { canvasBg: '#0d1117', gridLine: '#1e2a3a', tableBorder: '#2a4a6a', labelColor: '#7ec8e3', labelColor2: '#8a9ab0' }
 const LIGHT_THEME = { canvasBg: '#ffffff',  gridLine: '#d0dce8', tableBorder: '#4a7aaa', labelColor: '#1a5a90', labelColor2: '#4a6a90' }
 
@@ -366,6 +371,52 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     const m = {}; elements.forEach(el => { m[el.label] = el }); return m
   }, [elements])
 
+  // ── Parallel beam fan-out ─────────────────────────────────────────────────
+  // Beams sharing the same pair of elements would otherwise draw exactly on top of
+  // one another. Group them by the unordered pair and give each a perpendicular
+  // offset, evenly spaced and centred on zero (5 beams → -2,-1,0,+1,+2 × spacing).
+  // Only visible beams are counted, so hiding one re-centres the rest.
+  const beamEdgeOffsets = useMemo(() => {
+    const groups = new Map()
+    Object.entries(beamPaths)
+      // Sort by path name so the slot each beam lands in is stable across renders
+      // rather than depending on object insertion order.
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([name, path]) => {
+        if (!visiblePaths[name]) return
+        ;(path.edges ?? []).forEach(([src, dest], ei) => {
+          if (!elemByLabel[src] || !elemByLabel[dest]) return
+          // NUL separator: labels and path names are free text that may contain
+          // spaces, which would let distinct pairs collide on a shared key.
+          const key = [src, dest].slice().sort().join('\u0000')
+          if (!groups.has(key)) groups.set(key, [])
+          groups.get(key).push(`${name}\u0000${ei}`)
+        })
+      })
+    const spacing = settings.beamSpacing ?? DEFAULT_BEAM_SPACING
+    const offsets = new Map()
+    groups.forEach(members => {
+      if (members.length < 2 || !spacing) return
+      const mid = (members.length - 1) / 2
+      members.forEach((id, i) => offsets.set(id, (i - mid) * spacing))
+    })
+    return offsets
+  }, [beamPaths, visiblePaths, elemByLabel, settings.beamSpacing])
+
+  // Unit perpendicular for an element pair, derived from the pair's canonical
+  // (label-sorted) direction — not the individual edge's — so that an A→B beam and
+  // a B→A beam fan out to opposite sides instead of landing on the same one.
+  function pairNormal(src, dest) {
+    const [a, b] = [src, dest].slice().sort()
+    const ea = elemByLabel[a], eb = elemByLabel[b]
+    if (!ea || !eb) return null
+    const dx = px(eb.x) - px(ea.x)
+    const dy = py(eb.y) - py(ea.y)
+    const len = Math.hypot(dx, dy)
+    if (!len) return null
+    return { nx: -dy / len, ny: dx / len }
+  }
+
   // ── Background object rendering ───────────────────────────────────────────
   function renderBgEdges() {
     const out = []
@@ -454,8 +505,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       edges.forEach(([src, dest], ei) => {
         const srcEl = elemByLabel[src], dstEl = elemByLabel[dest]
         if (!srcEl || !dstEl) return
-        const x1 = px(srcEl.x), y1 = py(srcEl.y)
-        const x2 = px(dstEl.x), y2 = py(dstEl.y)
+        let x1 = px(srcEl.x), y1 = py(srcEl.y)
+        let x2 = px(dstEl.x), y2 = py(dstEl.y)
+        const off = beamEdgeOffsets.get(`${name}\u0000${ei}`)
+        if (off) {
+          const n = pairNormal(src, dest)
+          if (n) {
+            x1 += n.nx * off; y1 += n.ny * off
+            x2 += n.nx * off; y2 += n.ny * off
+          }
+        }
         out.push(
           <g key={`${name}-${ei}`}>
             <line x1={x1} y1={y1} x2={x2} y2={y2}

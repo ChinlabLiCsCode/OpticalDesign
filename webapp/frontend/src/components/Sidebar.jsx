@@ -99,6 +99,8 @@ export default function Sidebar({
 
   function set(key, val) { onSettingsChange({ ...settings, [key]: val }) }
   function setNum(key, val) { const v = parseFloat(val); if (!isNaN(v) && v > 0) set(key, v) }
+  // Variant for settings where 0 is meaningful (e.g. beam offset 0 = no fan-out).
+  function setNumZeroOk(key, val) { const v = parseFloat(val); if (!isNaN(v) && v >= 0) set(key, v) }
   function setConfig(key, val) {
     const v = parseFloat(val)
     if (isNaN(v)) return
@@ -585,6 +587,19 @@ export default function Sidebar({
                 value={settings.gridLineWidth}
                 onChange={e => setNum('gridLineWidth', e.target.value)} />
             </div>
+          </section>
+
+          <section className="sidebar-section">
+            <div className="sidebar-section-header"><span>Beam Paths</span></div>
+            <div className="setting-row">
+              <span className="setting-label">Overlap offset</span>
+              <input className="snap-input" type="number" min="0" max="20" step="0.5"
+                value={settings.beamSpacing ?? 1}
+                onChange={e => setNumZeroOk('beamSpacing', e.target.value)} />
+            </div>
+            <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Perpendicular gap between beams sharing the same two elements. 0 = no offset.
+            </p>
           </section>
 
           <section className="sidebar-section">

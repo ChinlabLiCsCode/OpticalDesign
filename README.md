@@ -6,7 +6,7 @@ A browser-based tool for visualising and editing optical layouts on a 2D table d
 
 - **Interactive canvas** — pan (drag), zoom (scroll), snap-to-grid placement
 - **Elements** — add, move, rotate, and soft-delete optical elements; O-number labels and type annotations rendered on canvas
-- **Beam paths** — draw and colour-code beam paths between elements
+- **Beam paths** — draw and colour-code beam paths between elements; beams sharing the same pair of elements fan out automatically so none are hidden underneath another
 - **Background objects** — overlay structural geometry (mounts, chamber ports, etc.)
 - **Optics styles** — regex-matched symbol definitions map element type strings to SVG icons; 69 built-in symbols included
 - **Search** — Cmd/Ctrl+F highlights matching elements and centres the view
@@ -49,6 +49,12 @@ Two additional modes are entered from the sidebar rather than the toolbar:
 - **Background-object edit** — click the ✎ next to a group in the **Objects** tab. Click two points to draw a line segment (clicking an element snaps to its position; `Shift`-click for a free point); click an existing segment to delete it. Exit with **Done** in the sidebar or `Escape`.
 
 `Escape` always backs out one step at a time: it clears a pending point/edge first, then exits edit mode, then returns to Select.
+
+#### Overlapping beams
+
+When several beams run between the same two elements they would otherwise be drawn exactly on top of each other. Instead they are fanned out perpendicular to the direction of travel, evenly spaced and centred on the un-offset line — five beams render at −2, −1, 0, +1, +2 spacings. Only visible beams count toward the spread, so hiding one re-centres the remainder. A beam drawn A→B and another drawn B→A are treated as sharing the same corridor and fan out to opposite sides rather than overlapping.
+
+The gap is the **Beam Paths → Overlap offset** setting (Settings tab, default `1`), stored as `beamSpacing` in `settings.json`. Set it to `0` to switch the fan-out off entirely.
 
 ### Keyboard shortcuts
 
@@ -107,7 +113,7 @@ Each field is seeded with the value from the first selected element and starts u
 - **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
 - **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
 - **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group.
-- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs).
+- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, beam-path overlap offset, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs).
 
 Drag the divider between the canvas and the sidebar to resize the sidebar.
 

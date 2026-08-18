@@ -135,6 +135,7 @@ export default function App() {
     darkMode:         false,
     showGrid:      true,
     gridLineWidth: 0.5,
+    beamSpacing:   1,
     scale:         10,
     showCoords:    true,
     uiFontSize:    12,
