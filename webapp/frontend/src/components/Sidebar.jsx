@@ -18,7 +18,7 @@ export default function Sidebar({
   beamPaths, visiblePaths, onToggle, onToggleAll,
   onAddPath, onDeletePath, onSetPathColor, onRenamePath,
   // Beam path editing
-  selectedLabels, selectedElement, allMetaKeys, onUpdateElement,
+  selectedLabels, selectedElement, allMetaKeys, onUpdateElement, onRenameElement,
   editingPath, onSetEditingPath, onDeleteEdge,
   // Background objects
   bgGroups, visibleBg, onToggleBg, onToggleAllBg,
@@ -388,6 +388,7 @@ export default function Sidebar({
 
           <section className="sidebar-section sidebar-hint">
             <p>Click to select · Shift+click for multi-select</p>
+            <p>P = set properties (e.g. Layer) on all selected</p>
             <p>Del = hide (In Design = FALSE) · Shift+Del = delete from file</p>
           </section>
         </>
@@ -700,6 +701,11 @@ export default function Sidebar({
           <div className="element-detail">
             <table className="detail-table">
               <tbody>
+                <tr>
+                  <td>O-number</td>
+                  <td><FieldInput value={selectedElement.label}
+                    onChange={v => onRenameElement(selectedElement.label, v)} /></td>
+                </tr>
                 <tr>
                   <td>Type</td>
                   <td><FieldInput value={selectedElement.type ?? ''} onChange={v => onUpdateElement(selectedElement.label, 'type', v)} /></td>

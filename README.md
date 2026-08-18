@@ -60,6 +60,7 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 | `Cmd/Ctrl+S` | Download Project (saves the current layout as a `.zip`) |
 | `Cmd/Ctrl+Z` | Undo the last change |
 | `N` | Add a new element at the last cursor position, reusing the previously used type |
+| `P` | Bulk-set properties (Layer, Type, Orientation, In Design, custom columns) on every selected element |
 | `B` / `L` / `M` / `R` | Switch to Box Select / Lasso / Move / Rotate mode |
 | `Escape` | Cancel the current action / edit mode / selection tool, one step at a time |
 | `Delete` or `Backspace` | Soft-delete selected elements (hides them, sets In Design = FALSE, keeps them in the file) |
@@ -78,6 +79,18 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 - **Shift+click** an element to add/remove it from a multi-selection.
 - **Drag** a selected element to move it (in Select or Move mode).
 - **Double-click** a path, layer, or background-object name in the sidebar to rename it.
+
+### Editing a single element
+
+Selecting exactly one element opens a detail panel at the bottom of the sidebar. Every field is editable there, including the **O-number** itself — edit it and press Enter (or click away) to commit. Renames are rejected if the new label is blank or already in use, and any beam paths referencing the element are repointed automatically.
+
+O-numbers can also be edited in bulk-ish fashion from **View ▾ → Elements**, by editing the Label column.
+
+### Bulk editing properties
+
+Select several elements (Shift+click, Box Select, or Lasso) and press `P` to set properties across the whole selection at once — most usefully **Layer**, but also Type, Orientation, In Design, and any custom columns.
+
+Each field is seeded with the value from the first selected element and starts unticked. Only ticked fields are written; editing a field ticks it automatically. `Escape` or **Cancel** closes without changing anything, and an applied change is a single `Cmd/Ctrl+Z` undo step.
 
 ### Sidebar tabs
 

@@ -155,6 +155,7 @@ export default function App() {
   const [zipStage,      setZipStage]      = useState(null) // 'choose' | 'newName' | null
   const [zipNewName,    setZipNewName]    = useState('')
   const [zipSettingsPrompt, setZipSettingsPrompt] = useState(null) // { next }
+  const [bulkEdit,      setBulkEdit]      = useState(null) // { enabled: {key:bool}, values: {key:val} }
 
   const searchInputRef   = useRef(null)
   const cursorPosRef     = useRef({ x: 0, y: 0 })
@@ -277,6 +278,13 @@ export default function App() {
         saveProject()
         return
       }
+      // Checked before the text-field guard so Escape closes the bulk-edit modal
+      // even while a field inside it has focus.
+      if (e.key === 'Escape' && bulkEdit) {
+        e.preventDefault()
+        setBulkEdit(null)
+        return
+      }
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
@@ -289,10 +297,14 @@ export default function App() {
         const ry = Math.round(cursorPosRef.current.y / snap) * snap
         setAddElemAt({ x: rx, y: ry, label: nextOLabel(elements), type: lastAddedTypeRef.current || '' })
       }
+      if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        openBulkEdit()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [history, elements, settings.snapSpacing, undo, saveProject])
+  }, [history, elements, settings.snapSpacing, undo, saveProject, openBulkEdit, bulkEdit])
 
   useEffect(() => {
     if (!fileMenuOpen) return
@@ -367,6 +379,48 @@ export default function App() {
       const n = parseFloat(value); if (isNaN(n)) return; parsed = n
     }
     setOverrides(ov => ({ ...ov, [label]: { ...(ov[label] ?? {}), [key]: parsed } }))
+  }
+
+  // ── Bulk property edit (P key) ─────────────────────────────────────────────
+  // Seeds each field from the first selected element so the form shows current
+  // values; only fields the user ticks are written to the whole selection.
+  function openBulkEdit() {
+    if (!selectedLabels.size) return
+    const first = allMergedElements.find(el => selectedLabels.has(el.label))
+    const values = {
+      Layer:       first?.Layer || activeLayer || 'Default',
+      type:        first?.type ?? '',
+      orientation: first?.orientation ?? 0,
+      in_design:   first?.in_design !== false,
+    }
+    allMetaKeys.forEach(k => { values[k] = first?.[k] ?? '' })
+    setBulkEdit({ enabled: {}, values })
+  }
+
+  function applyBulkEdit() {
+    if (!bulkEdit) return
+    const { enabled, values } = bulkEdit
+    const patch = {}
+    for (const key of Object.keys(values)) {
+      if (!enabled[key]) continue
+      if (key === 'orientation') {
+        const n = parseFloat(values[key])
+        if (isNaN(n)) continue
+        patch[key] = n
+      } else {
+        patch[key] = values[key]
+      }
+    }
+    if (!Object.keys(patch).length) { setBulkEdit(null); return }
+    pushHistory()
+    setOverrides(ov => {
+      const next = { ...ov }
+      selectedLabels.forEach(label => {
+        next[label] = { ...(next[label] ?? {}), ...patch }
+      })
+      return next
+    })
+    setBulkEdit(null)
   }
 
   useEffect(() => {
@@ -1226,6 +1280,21 @@ export default function App() {
       if (next.has(oldLabel)) { next.delete(oldLabel); next.add(trimmed) }
       return next
     })
+    // Beam path edges reference elements by label — repoint them, or the edge
+    // dangles and the beam silently vanishes from the diagram.
+    setBeamPaths(bp => {
+      let changed = false
+      const next = {}
+      for (const [name, path] of Object.entries(bp)) {
+        const edges = (path.edges ?? []).map(([s, d]) => {
+          if (s !== oldLabel && d !== oldLabel) return [s, d]
+          changed = true
+          return [s === oldLabel ? trimmed : s, d === oldLabel ? trimmed : d]
+        })
+        next[name] = { ...path, edges }
+      }
+      return changed ? next : bp
+    })
   }
 
   const CORE_COL_SET = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design'])
@@ -1535,6 +1604,7 @@ export default function App() {
           selectedElement={selectedElement}
           allMetaKeys={allMetaKeys}
           onUpdateElement={updateElementField}
+          onRenameElement={renameElement}
           editingPath={editingPath}
           onSetEditingPath={setEditingPath}
           onDeleteEdge={deleteEdge}
@@ -1784,6 +1854,85 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── Bulk property edit (P) ───────────────────────────────────────────── */}
+      {bulkEdit && (() => {
+        const count = selectedLabels.size
+        const toggle = key => setBulkEdit(b => ({ ...b, enabled: { ...b.enabled, [key]: !b.enabled[key] } }))
+        // Editing a value implies intent to apply it, so tick the box automatically —
+        // otherwise an edited-but-unticked field would be silently ignored on Apply.
+        const setVal = (key, v) => setBulkEdit(b => ({
+          ...b,
+          values:  { ...b.values,  [key]: v },
+          enabled: { ...b.enabled, [key]: true },
+        }))
+        const anyEnabled = Object.values(bulkEdit.enabled).some(Boolean)
+
+        const row = (key, label, control) => (
+          <label key={key} style={{
+            display: 'grid', gridTemplateColumns: '18px 90px 1fr', alignItems: 'center',
+            gap: 8, marginBottom: 6, fontSize: 12,
+            opacity: bulkEdit.enabled[key] ? 1 : 0.55,
+          }}>
+            <input type="checkbox" checked={!!bulkEdit.enabled[key]} onChange={() => toggle(key)} />
+            <span>{label}</span>
+            {control}
+          </label>
+        )
+
+        return (
+          <div className="modal-backdrop" onClick={() => setBulkEdit(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Set properties on {count} element{count !== 1 ? 's' : ''}</div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+                Tick a property to apply it to the whole selection. Unticked properties are left alone.
+              </p>
+
+              {row('Layer', 'Layer', (
+                <select className="snap-input" value={bulkEdit.values.Layer} autoFocus
+                  onChange={e => setVal('Layer', e.target.value)}>
+                  {Object.keys(layers).map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+              ))}
+
+              {row('type', 'Type', (
+                <input className="snap-input" value={bulkEdit.values.type}
+                  onChange={e => setVal('type', e.target.value)} />
+              ))}
+
+              {row('orientation', 'Orientation °', (
+                <input className="snap-input" type="number" value={bulkEdit.values.orientation}
+                  onChange={e => setVal('orientation', e.target.value)} />
+              ))}
+
+              {row('in_design', 'In Design', (
+                <select className="snap-input" value={bulkEdit.values.in_design ? 'true' : 'false'}
+                  onChange={e => setVal('in_design', e.target.value === 'true')}>
+                  <option value="true">TRUE (visible)</option>
+                  <option value="false">FALSE (hidden)</option>
+                </select>
+              ))}
+
+              {allMetaKeys.length > 0 && (
+                <div style={{ borderTop: '1px solid var(--border-side)', margin: '10px 0 8px', paddingTop: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Custom columns</div>
+                  {allMetaKeys.map(k => row(k, k, (
+                    <input className="snap-input" value={bulkEdit.values[k] ?? ''}
+                      onChange={e => setVal(k, e.target.value)} />
+                  )))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button className="small-btn" disabled={!anyEnabled} onClick={applyBulkEdit}>
+                  Apply to {count}
+                </button>
+                <button className="small-btn" onClick={() => setBulkEdit(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Project ZIP upload: new project vs. overwrite current ────────────── */}
       {zipUpload && zipStage === 'choose' && (() => {
