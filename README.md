@@ -80,6 +80,16 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 - **Drag** a selected element to move it (in Select or Move mode).
 - **Double-click** a path, layer, or background-object name in the sidebar to rename it.
 
+### O-numbers are unique
+
+Every element's O-number is enforced unique across all three ways one can be set:
+
+- **Add Element form** — the O-number field turns red and **Add** is disabled while the typed label collides with an existing element.
+- **Renaming** (sidebar detail panel or the Label column in **View ▾ → Elements**) — a blank or already-used O-number is rejected with an explanatory banner, and the field reverts.
+- **Importing** — duplicates are renamed with a `_2`/`_3` suffix and a banner reports exactly what was renamed. This covers duplicates against existing elements *and* duplicates within the uploaded file itself.
+
+Renaming an element also repoints any beam paths that referenced it, so beams stay connected.
+
 ### Editing a single element
 
 Selecting exactly one element opens a detail panel at the bottom of the sidebar. Every field is editable there, including the **O-number** itself — edit it and press Enter (or click away) to commit. Renames are rejected if the new label is blank or already in use, and any beam paths referencing the element are repointed automatically.

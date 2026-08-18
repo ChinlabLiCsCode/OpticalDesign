@@ -70,6 +70,24 @@ function suggestAltLabel(label, usedLabels) {
   return candidate
 }
 
+// Enforce label uniqueness over a list of elements, renaming any duplicate after the
+// first with the _2/_3 scheme. `seedLabels` are labels already taken elsewhere (e.g.
+// the elements currently in the project, when appending). Duplicates can arrive from
+// a hand-edited CSV as well as from a collision with existing elements, so every
+// ingestion path runs through here.
+function dedupeElementLabels(elems, seedLabels = []) {
+  const used = new Set(seedLabels)
+  const renamed = []
+  const out = (elems ?? []).map(el => {
+    if (!used.has(el.label)) { used.add(el.label); return el }
+    const candidate = suggestAltLabel(el.label, used)
+    used.add(candidate)
+    renamed.push([el.label, candidate])
+    return { ...el, label: candidate }
+  })
+  return { elements: out, renamed }
+}
+
 // Guess which CSV a dropped file is from its name — 'elements' | 'paths' | 'objects' | null
 function inferCsvKindFromName(filename) {
   const name = filename.toLowerCase()
@@ -99,6 +117,7 @@ export default function App() {
   const [bgGroups,     setBgGroups]     = useState(() => _ls?.bgGroups     ?? {})
   const [visibleBg,    setVisibleBg]    = useState(() => _ls?.visibleBg    ?? {})
   const [error,        setError]        = useState(null)
+  const [notice,       setNotice]       = useState(null)
 
   const [selectedLabels, setSelectedLabels] = useState(() => new Set())
   const [overrides,  setOverrides]  = useState(() => _ls?.overrides  ?? {})
@@ -365,6 +384,12 @@ export default function App() {
 
   function addElement({ type, x, y, orientation = 0, label: providedLabel }) {
     const label = providedLabel?.trim() || nextOLabel(elements)
+    // Last line of defence: the add form validates as you type, but no caller may
+    // create a second element sharing an O-number.
+    if (elements.some(el => el.label === label)) {
+      setError(`O-number "${label}" is already in use — choose a different one.`)
+      return
+    }
     lastAddedTypeRef.current = type
     pushHistory()
     const newEl = { label, type, x, y, orientation, in_design: true, Layer: activeLayer }
@@ -837,9 +862,11 @@ export default function App() {
     let newElements = []
     if (elemText) {
       const { elements: parsed, config: parsedCfg } = parseElementsCsv(elemText)
-      newElements = parsed
+      const { elements: deduped, renamed } = dedupeElementLabels(parsed)
+      newElements = deduped
       if (parsedCfg && !settingsText) newConfig = parsedCfg
-      newLayers = syncLayersFromElements(parsed, newLayers)
+      newLayers = syncLayersFromElements(deduped, newLayers)
+      reportRenamedLabels(renamed)
     }
 
     let newBeamPaths = {}, newVisiblePaths = {}
@@ -978,24 +1005,28 @@ export default function App() {
   function applyElementsUpload(parsed, parsedCfg, append) {
     if (append) {
       pushHistory()
-      setElements(els => {
-        const usedLabels = new Set(els.map(el => el.label))
-        const relabeled = parsed.map(el => {
-          if (!usedLabels.has(el.label)) { usedLabels.add(el.label); return el }
-          const candidate = suggestAltLabel(el.label, usedLabels)
-          usedLabels.add(candidate)
-          return { ...el, label: candidate }
-        })
-        return [...els, ...relabeled]
-      })
+      const { elements: relabeled, renamed } = dedupeElementLabels(parsed, elements.map(el => el.label))
+      setElements(els => [...els, ...relabeled])
       setLayers(prev => syncLayersFromElements(parsed, prev))
+      reportRenamedLabels(renamed)
     } else {
-      setElements(parsed)
+      // A replace still has to guard against duplicates *within* the uploaded file.
+      const { elements: deduped, renamed } = dedupeElementLabels(parsed)
+      setElements(deduped)
       if (parsedCfg) setConfig(parsedCfg)
-      setLayers(prev => syncLayersFromElements(parsed, prev))
+      setLayers(prev => syncLayersFromElements(deduped, prev))
       setSelectedLabels(new Set()); setOverrides({}); setHistory([])
+      reportRenamedLabels(renamed)
     }
     setUploadConflict(null)
+  }
+
+  // Tell the user when an import silently had to rename rows to keep O-numbers unique.
+  function reportRenamedLabels(renamed) {
+    if (!renamed?.length) return
+    const shown = renamed.slice(0, 5).map(([from, to]) => `${from} → ${to}`).join(', ')
+    const more = renamed.length > 5 ? `, and ${renamed.length - 5} more` : ''
+    setNotice(`Renamed ${renamed.length} duplicate O-number${renamed.length !== 1 ? 's' : ''} in the imported file: ${shown}${more}.`)
   }
 
   // Appending merges edges into any path with a matching name, otherwise adds the path.
@@ -1267,7 +1298,17 @@ export default function App() {
   // ── Spreadsheet edit handlers ──────────────────────────────────────────────
   function renameElement(oldLabel, newLabel) {
     const trimmed = newLabel.trim()
-    if (!trimmed || trimmed === oldLabel || elements.some(el => el.label === trimmed)) return
+    if (trimmed === oldLabel) return
+    // Previously these rejections were silent, so a duplicate rename looked like
+    // nothing happened. Say why instead.
+    if (!trimmed) {
+      setError('An O-number cannot be blank.')
+      return
+    }
+    if (elements.some(el => el.label === trimmed)) {
+      setError(`O-number "${trimmed}" is already in use — rename that element first.`)
+      return
+    }
     pushHistory()
     setElements(els => els.map(el => el.label === oldLabel ? { ...el, label: trimmed } : el))
     setOverrides(ov => {
@@ -1524,6 +1565,13 @@ export default function App() {
         <div className="gen-banner gen-banner-error">
           <pre>{error}</pre>
           <button onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
+
+      {notice && (
+        <div className="gen-banner">
+          <pre>{notice}</pre>
+          <button onClick={() => setNotice(null)}>✕</button>
         </div>
       )}
 

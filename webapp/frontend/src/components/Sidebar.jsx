@@ -265,10 +265,13 @@ export default function Sidebar({
               }}>+</button>
             </div>
             {addingElement && (() => {
+              const trimmedLabel = newElemLabel.trim()
+              const isDupLabel = !!trimmedLabel && (elements ?? []).some(el => el.label === trimmedLabel)
+              const canAdd = !!newElemType.trim() && !isDupLabel
+
               function commitAdd() {
-                const type = newElemType.trim()
-                if (!type) return
-                onAddElement({ type, label: newElemLabel.trim() || undefined, x: newElemX, y: newElemY })
+                if (!canAdd) return
+                onAddElement({ type: newElemType.trim(), label: trimmedLabel || undefined, x: newElemX, y: newElemY })
                 setAddingElement(false)
               }
               function kd(e) {
@@ -278,17 +281,25 @@ export default function Sidebar({
               return (
                 <div className="add-group-form" style={{ flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    <input className="snap-input" style={{ width: 70, flexShrink: 0 }}
+                    <input className="snap-input" style={{
+                        width: 70, flexShrink: 0,
+                        borderColor: isDupLabel ? '#e06c75' : undefined,
+                      }}
                       placeholder="O-number" value={newElemLabel}
                       onChange={e => setNewElemLabel(e.target.value)} onKeyDown={kd} autoFocus />
                     <input className="snap-input add-name-input" placeholder="Type (e.g. mirror)"
                       value={newElemType} onChange={e => setNewElemType(e.target.value)} onKeyDown={kd} />
                   </div>
+                  {isDupLabel && (
+                    <span style={{ fontSize: 10, color: '#e06c75' }}>
+                      O-number "{trimmedLabel}" is already in use
+                    </span>
+                  )}
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                       ({newElemX?.toFixed(1)}, {newElemY?.toFixed(1)})
                     </span>
-                    <button className="small-btn" onClick={commitAdd}>Add</button>
+                    <button className="small-btn" onClick={commitAdd} disabled={!canAdd}>Add</button>
                     <button className="small-btn" onClick={() => setAddingElement(false)}>✕</button>
                   </div>
                 </div>
