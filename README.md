@@ -8,11 +8,116 @@ A browser-based tool for visualising and editing optical layouts on a 2D table d
 - **Elements** — add, move, rotate, and soft-delete optical elements; O-number labels and type annotations rendered on canvas
 - **Beam paths** — draw and colour-code beam paths between elements
 - **Background objects** — overlay structural geometry (mounts, chamber ports, etc.)
-- **Optics styles** — regex-matched symbol definitions map element type strings to SVG icons; 66 built-in symbols included
+- **Optics styles** — regex-matched symbol definitions map element type strings to SVG icons; 69 built-in symbols included
 - **Search** — Cmd/Ctrl+F highlights matching elements and centres the view
+- **Layers** — group elements onto named layers and show/hide them independently
 - **In Design toggle** — elements can be hidden from the diagram without being deleted; restored via the Elements tab
-- **Export** — vector PDF export; individual CSV/JSON saves; full project ZIP
+- **Import** — upload individual CSV/JSON files or a whole project ZIP, by menu or drag-and-drop, with prompts to replace or append when the project already has data
+- **Export** — vector PDF export; individual CSV/JSON downloads; full project ZIP
+- **Projects** — multiple named projects saved in the browser, switchable at any time
 - **Persistence** — layout state is saved to localStorage automatically
+
+## Using online
+
+The app is hosted at [opticaldesigner.netlify.app](https://opticaldesigner.netlify.app) — no install required, just open it in a browser.
+
+There is no server-side storage: your layout lives entirely in that browser's **localStorage**, scoped to that domain. This means:
+
+- Work persists automatically across page reloads and browser restarts, but only on the same browser/device you were using.
+- Clearing site data/cookies for the domain, using a different browser, or going incognito will lose unsaved work.
+- Nothing is uploaded anywhere — files never leave your machine unless you explicitly export/save them.
+
+Use **File ▾ → Download Project** (or `Cmd/Ctrl+S`) to export your layout to a `.zip` whenever you want a durable, shareable copy outside the browser.
+
+## User guide
+
+### Editing modes
+
+The canvas toolbar (bottom-left) switches between modes. The current mode determines what a click or drag on the canvas does.
+
+| Mode | Enter | What it does |
+|---|---|---|
+| **Select** (default) | `Escape`, or the ↖ toolbar button | Click an element to select it; click empty canvas to deselect; drag empty canvas to pan; drag an element to move it |
+| **Box Select** | `B`, or the ⬚ toolbar button | Drag a rectangle to select every element inside it |
+| **Lasso Select** | `L`, or the ⌾ toolbar button | Freehand-drag a lasso; elements inside the closed shape are selected |
+| **Move** | `M` (requires a selection), or the ✥ toolbar button, or simply drag a selected element | Drag selected element(s); snaps to the grid unless `Shift` is held; arrow keys nudge by one grid step |
+| **Rotate** | `R` (requires a selection), or the ↻ toolbar button | Drag a selected element to rotate it about its own origin; snaps to 45° unless `Shift` is held; arrow keys rotate ±45° |
+
+Two additional modes are entered from the sidebar rather than the toolbar:
+
+- **Beam-path edit** — click the ✎ next to a path in the **Paths** tab. Click a source element, then a destination element, to add an edge between them; clicking an existing edge deletes it. Click the pending source again to cancel it. Exit with **Done** in the sidebar or `Escape`.
+- **Background-object edit** — click the ✎ next to a group in the **Objects** tab. Click two points to draw a line segment (clicking an element snaps to its position; `Shift`-click for a free point); click an existing segment to delete it. Exit with **Done** in the sidebar or `Escape`.
+
+`Escape` always backs out one step at a time: it clears a pending point/edge first, then exits edit mode, then returns to Select.
+
+### Keyboard shortcuts
+
+Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/Ctrl+S, which always work.
+
+| Shortcut | Action |
+|---|---|
+| `Cmd/Ctrl+F` | Open the search bar and jump to matching elements |
+| `Cmd/Ctrl+S` | Download Project (saves the current layout as a `.zip`) |
+| `Cmd/Ctrl+Z` | Undo the last change |
+| `N` | Add a new element at the last cursor position, reusing the previously used type |
+| `B` / `L` / `M` / `R` | Switch to Box Select / Lasso / Move / Rotate mode |
+| `Escape` | Cancel the current action / edit mode / selection tool, one step at a time |
+| `Delete` or `Backspace` | Soft-delete selected elements (hides them, sets In Design = FALSE, keeps them in the file) |
+| `Shift+Delete` or `Shift+Backspace` | Hard-delete selected elements (removes them entirely) |
+| Arrow keys (Move mode) | Nudge selected element(s) by one grid step |
+| Arrow keys (Rotate mode) | Rotate selected element(s) ±45° (Right/Down = +45°, Left/Up = −45°) |
+| `Shift` (while dragging/rotating) | Disables snapping for free positioning/angle |
+| `Shift` + click | Add/remove an element from the current selection |
+| `Shift` + drag (Box/Lasso Select) | Add the enclosed elements to the current selection instead of replacing it |
+
+### Mouse & canvas controls
+
+- **Scroll** to zoom in/out, centered on the cursor.
+- **Drag empty canvas** to pan.
+- **Click** an element to select it; **click empty canvas** to deselect.
+- **Shift+click** an element to add/remove it from a multi-selection.
+- **Drag** a selected element to move it (in Select or Move mode).
+- **Double-click** a path, layer, or background-object name in the sidebar to rename it.
+
+### Sidebar tabs
+
+- **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
+- **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
+- **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group.
+- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs).
+
+Drag the divider between the canvas and the sidebar to resize the sidebar.
+
+### Search
+
+`Cmd/Ctrl+F` opens a live search over element label/type; matches are highlighted on the canvas and the view centers on them. Close with `Escape` or the ✕ button.
+
+### Viewing and editing raw data
+
+**View ▾** in the header opens a spreadsheet-style modal for Elements, Beam Paths, or Background Objects. Click a cell to edit it inline, add/delete rows, and (for Elements) add or rename custom columns by double-clicking a header. `Tab` commits a cell and moves to the next column; `Escape` cancels an in-progress edit, or closes the modal if nothing is being edited.
+
+### Uploading and downloading files
+
+**File ▾** has three sections:
+
+- **Upload** — `Upload Elements…` / `Upload Paths…` / `Upload Objects…` / `Upload Settings…` load individual CSV/JSON files; `Upload Project…` loads a full `.zip` bundle (all four files plus embedded custom symbols).
+- **Download** — the matching per-file downloads, plus `Download Project` (also bound to `Cmd/Ctrl+S`) which exports everything as a `.zip`.
+- **Projects** — `New Project…` clears the workspace; `Switch Project…` lists and loads named project slots saved in the browser (localStorage); `Rename Project…` renames the current slot in place; `Save Project As…` duplicates the current files into a new, separately-named slot and switches to it, leaving the original slot untouched.
+
+**Export PDF**, a button in the header rather than a menu item, renders the current layout to a vector PDF.
+
+#### Merging uploads into an existing project
+
+Uploading Elements, Paths, or Objects into a project that already has data prompts you to **Replace** the existing data or **Append** the uploaded data to it. Appending elements that collide with existing O-numbers prompts you to **Auto-resolve** (renames colliding labels, e.g. `O-12` → `O-12_2`) or **Resolve manually**, which steps through each collision one at a time so you can pick its new label.
+
+Uploading a whole project `.zip` first asks how to bring it in:
+
+- **Open as New Project…** — prompts for a name, then loads the uploaded files as a separate new project, leaving the current project's saved slot untouched.
+- **Overwrite Current Project…** — merges the ZIP into the current project, asking about each part in turn: Replace/Append/Skip for elements, then beam paths, then background objects (with the same O-number collision handling as above), and finally whether to **Overwrite settings** (canvas scale, table size, grid, symbol library, layers) or **Keep current**.
+
+#### Drag and drop
+
+You can **drag and drop** a `.csv`, `.json`, or `.zip` file anywhere onto the app to upload it — the file type is inferred from its name (e.g. `elements.csv`, `beam_paths.csv`, `background_objects.csv`) or, failing that, from its header row. If a dropped CSV can't be identified either way, a dialog asks you to pick Elements, Beam Paths, or Background Objects. Dropped `.zip` files go through the same project-upload prompts described above.
 
 ## File formats
 
@@ -70,15 +175,51 @@ Line segments grouped by name (chamber walls, mounts, etc.):
 
 Stores canvas settings, table config, and optics style definitions. Optics styles map type-name patterns (supports `*wildcards*`) to SVG symbol files.
 
-## Running locally
+## Local development
+
+The app is a static single-page React app (Vite + React 19) — there's no backend or database to stand up, and everything runs in the browser against local files/localStorage.
+
+### Prerequisites
+
+- Node.js (Vite 8 requires a current LTS release; Node 20+ recommended)
+- npm
+
+### Setup
 
 ```bash
 cd webapp/frontend
 npm install
+```
+
+### Dev server
+
+```bash
 npm run dev
 ```
 
-The app runs entirely in the browser — no backend required.
+Starts Vite's dev server with hot module reload, by default at `http://localhost:5173`. Edit any file under `src/` and the browser updates automatically.
+
+### Production build
+
+```bash
+npm run build
+```
+
+Type-checks and bundles the app into `webapp/frontend/dist/` — the same command Netlify runs (`command` in [`netlify.toml`](netlify.toml)).
+
+```bash
+npm run preview
+```
+
+Serves the built `dist/` output locally so you can sanity-check a production build before pushing.
+
+### Lint
+
+```bash
+npm run lint
+```
+
+Runs ESLint over the `src/` tree.
 
 ## Deployment
 
@@ -86,7 +227,7 @@ The app is deployed via Netlify from this repository. Any push to `main` trigger
 
 ## Example files
 
-The [`webapp/example_files/`](webapp/example_files/) directory contains a sample layout that can be loaded via **Open Project** or by loading each CSV/JSON file individually using the header buttons.
+The [`webapp/example_files/`](webapp/example_files/) directory contains a sample layout that can be loaded from the **File ▾ → Upload** menu, or by dragging the files onto the app.
 
 ## Credits and license
 

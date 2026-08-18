@@ -27,7 +27,6 @@ export default function Sidebar({
   // Config + settings
   config, onConfigChange,
   settings, onSettingsChange,
-  onSaveSettings, onLoadSettings,
   // Symbol defs
   symbolDefs, onAddSymbolDef, onUpdateSymbolDef, onDeleteSymbolDef, onRenameSymbolDef,
   // Elements list + add
@@ -85,6 +84,7 @@ export default function Sidebar({
   // Triggered by N key from canvas
   useEffect(() => {
     if (!addElemAt) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing the add-element form from an external trigger (N key on canvas), not derived render state
     setNewElemLabel(addElemAt.label)
     setNewElemType(addElemAt.type)
     setNewElemX(addElemAt.x)

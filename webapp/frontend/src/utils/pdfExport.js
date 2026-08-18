@@ -1,5 +1,5 @@
-import jsPDF from 'jspdf'
-import { svg2pdf } from 'svg2pdf.js'
+// jspdf and svg2pdf.js are loaded on demand in exportSVGToPDF — together they are a
+// large share of the bundle and are only needed when the user actually exports a PDF.
 
 // Adobe Illustrator generates the same IDs (XMLID_1_, XMLID_2_, …) in every SVG it
 // exports. When multiple symbols are inlined into one document, those IDs collide and
@@ -119,6 +119,11 @@ async function triggerSave(blob, name, mime, ext) {
 }
 
 export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSize = 4) {
+  // Start fetching the PDF libraries now so the download overlaps with the symbol
+  // inlining below (which does its own network fetches); awaited just before use.
+  const libs = Promise.all([import('jspdf'), import('svg2pdf.js')])
+  libs.catch(() => {}) // avoid an unhandled rejection if the work below throws first
+
   const clone = svgEl.cloneNode(true)
   clone.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`)
   clone.setAttribute('width',  String(svgW))
@@ -162,9 +167,10 @@ export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSi
   const wMm = svgW * MM_PER_PX
   const hMm = svgH * MM_PER_PX
 
-  const doc = new jsPDF({ orientation: wMm > hMm ? 'l' : 'p', unit: 'mm', format: [wMm, hMm] })
-
+  let doc
   try {
+    const [{ default: jsPDF }, { svg2pdf }] = await libs
+    doc = new jsPDF({ orientation: wMm > hMm ? 'l' : 'p', unit: 'mm', format: [wMm, hMm] })
     await svg2pdf(clone, doc, { x: 0, y: 0, width: wMm, height: hMm })
   } finally {
     document.body.removeChild(clone)

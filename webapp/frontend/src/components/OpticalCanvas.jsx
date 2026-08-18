@@ -45,8 +45,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   const svgW = (table_length + 2 * PAD) * SCALE
   const svgH = (table_width  + 2 * PAD) * SCALE
 
-  function px(physX) { return (physX - minX) * SCALE }
-  function py(physY) { return svgH - (physY - minY) * SCALE }
+  const px = useCallback(physX => (physX - minX) * SCALE, [minX, SCALE])
+  const py = useCallback(physY => svgH - (physY - minY) * SCALE, [svgH, minY, SCALE])
 
   function screenToSVG(screenX, screenY) {
     const rect = svgRef.current.getBoundingClientRect()
@@ -360,7 +360,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         stroke={theme.gridLine} strokeWidth={settings.gridLineWidth} />)
     }
     return lines
-  }, [config, SCALE, theme.gridLine, settings.gridLineWidth])
+  }, [minX, minY, svgW, svgH, table_length, table_width, px, py, theme.gridLine, settings.gridLineWidth])
 
   const elemByLabel = useMemo(() => {
     const m = {}; elements.forEach(el => { m[el.label] = el }); return m
@@ -404,9 +404,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     const yStep = table_width  <= 15 ? 1 : 5
 
     const tableLeft   = px(origin_x)
-    const tableRight  = px(origin_x + table_length)
     const tableBottom = py(origin_y)
-    const tableTop    = py(origin_y + table_width)
     const labelOffX   = fontSize * 1.2
     const labelOffY   = fontSize * 1.4
 
@@ -494,7 +492,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       if (!rect) return
       setTransform(t => ({ k: t.k, x: rect.width / 2 - cx * t.k, y: rect.height / 2 - cy * t.k }))
     },
-  }), [svgW, svgH, elements, config, settings])
+  }), [svgW, svgH, elements, config, settings, transform.k])
 
   // ── Cursor ────────────────────────────────────────────────────────────────
   const bgCursor = (editingPath || editingBgGroup)

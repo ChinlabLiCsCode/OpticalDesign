@@ -3,7 +3,7 @@ import JSZip from 'jszip'
 import OpticalCanvas from './components/OpticalCanvas'
 import Sidebar from './components/Sidebar'
 import SpreadsheetModal from './components/SpreadsheetModal'
-import { DEFAULT_SYMBOL_DEFS } from './components/ElementShape'
+import { DEFAULT_SYMBOL_DEFS } from './utils/symbols'
 import {
   parseElementsCsv, serializeElementsCsv,
   parseBeamPathsCsv, serializeBeamPathsCsv,
@@ -63,6 +63,32 @@ function syncLayersFromElements(elems, existingLayers) {
   return updated
 }
 
+// Suggest a free label near the collided one, e.g. "O-12" -> "O-12_2"
+function suggestAltLabel(label, usedLabels) {
+  let i = 2, candidate = `${label}_${i}`
+  while (usedLabels.has(candidate)) { i++; candidate = `${label}_${i}` }
+  return candidate
+}
+
+// Guess which CSV a dropped file is from its name — 'elements' | 'paths' | 'objects' | null
+function inferCsvKindFromName(filename) {
+  const name = filename.toLowerCase()
+  if (/element/.test(name)) return 'elements'
+  if (/beam|path/.test(name)) return 'paths'
+  if (/background|object|^bg[-_.]/.test(name)) return 'objects'
+  return null
+}
+
+// Fall back to sniffing the header row for a known column signature
+function inferCsvKindFromHeader(text) {
+  const firstLine = (text.split(/\r?\n/).find(l => l.trim() && !l.trim().startsWith('#')) || '')
+  const cols = firstLine.split(',').map(c => c.trim().toLowerCase())
+  if (cols.includes('label') && cols.includes('type')) return 'elements'
+  if (cols.includes('src') && cols.includes('dest')) return 'paths'
+  if (cols.includes('group') && cols.includes('x1')) return 'objects'
+  return null
+}
+
 export default function App() {
   const _ls = useMemo(() => loadLocalState(), [])
 
@@ -118,6 +144,17 @@ export default function App() {
   const [newProjName,        setNewProjName]        = useState('')
   const [saveAsPromptOpen,   setSaveAsPromptOpen]   = useState(false)
   const [saveAsProjName,     setSaveAsProjName]     = useState('')
+  const [dupProjPromptOpen,  setDupProjPromptOpen]  = useState(false)
+  const [dupProjName,        setDupProjName]        = useState('')
+  const [uploadConflict,     setUploadConflict]     = useState(null) // { kind: 'elements'|'paths'|'objects', parsed, parsedCfg }
+  const [labelCollisionPrompt, setLabelCollisionPrompt] = useState(null) // { parsed, parsedCfg, count }
+  const [manualRelabel,        setManualRelabel]        = useState(null) // { parsed, parsedCfg, resolvedLabels, queue, step, usedLabels, value }
+  const [dragActive,   setDragActive]   = useState(false)
+  const [dropAmbiguous, setDropAmbiguous] = useState(null) // { file }
+  const [zipUpload,     setZipUpload]     = useState(null) // { fileName, settingsText, elemText, pathsText, bgText, customSvgMap }
+  const [zipStage,      setZipStage]      = useState(null) // 'choose' | 'newName' | null
+  const [zipNewName,    setZipNewName]    = useState('')
+  const [zipSettingsPrompt, setZipSettingsPrompt] = useState(null) // { next }
 
   const searchInputRef   = useRef(null)
   const cursorPosRef     = useRef({ x: 0, y: 0 })
@@ -129,6 +166,7 @@ export default function App() {
   const zipFileRef       = useRef(null)
   const lastAddedTypeRef = useRef('')
   const persistTimer     = useRef(null)
+  const dragCounterRef   = useRef(0)
   const fileMenuRef      = useRef(null)
   const viewMenuRef      = useRef(null)
 
@@ -234,6 +272,11 @@ export default function App() {
         setTimeout(() => searchInputRef.current?.focus(), 0)
         return
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        saveProject()
+        return
+      }
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
@@ -249,7 +292,7 @@ export default function App() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [history])
+  }, [history, elements, settings.snapSpacing, undo, saveProject])
 
   useEffect(() => {
     if (!fileMenuOpen) return
@@ -451,11 +494,11 @@ export default function App() {
     setHistory([])
   }
 
-  function saveProjectSlot(name, id) {
+  function saveProjectSlot(name, id, stateOverride) {
     const trimmed = name.trim() || 'Untitled'
     const pid = id ?? crypto.randomUUID()
     const projects = loadSavedProjects()
-    projects[pid] = { name: trimmed, savedAt: Date.now(), state: captureProjectState() }
+    projects[pid] = { name: trimmed, savedAt: Date.now(), state: stateOverride ?? captureProjectState() }
     localStorage.setItem('optDesign_projects', JSON.stringify(projects))
     localStorage.setItem('optDesign_current_project', JSON.stringify({ id: pid, name: trimmed }))
     setCurrentProjectId(pid)
@@ -666,7 +709,8 @@ export default function App() {
     } catch (e) { if (e.name !== 'AbortError') setError('Save project failed: ' + e.message) }
   }
 
-  async function loadProjectZip(file) {
+  // ── Project ZIP upload: new-project vs. overwrite-current wizard ──────────
+  async function handleProjectZipFile(file) {
     if (!file) return
     try {
       const zip = await JSZip.loadAsync(file)
@@ -691,50 +735,149 @@ export default function App() {
         readZipFile('beam_paths.csv'),
         readZipFile('background_objects.csv'),
       ])
-      let zipLayers = null, zipActiveLayer = null
-      if (settingsText) {
-        try {
-          const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
-          if (s)  setSettings(prev => ({ ...prev, ...s }))
-          if (c)  setConfig(c)
-          if (l)  { zipLayers = l; setLayers(l) }
-          if (al) { zipActiveLayer = al; setActiveLayer(al) }
-          if (sd) {
-            const resolved = {}
-            for (const [type, def] of Object.entries(sd)) {
-              resolved[type] = customSvgMap[def.href]
-                ? { ...def, href: customSvgMap[def.href] }
-                : def
-            }
-            setSymbolDefs(resolved)
-          }
-        } catch {}
-      }
-      if (elemText) {
-        const { elements: parsed, config: parsedCfg, error: err } = parseElementsCsv(elemText)
-        if (!err || parsed.length) {
-          setElements(parsed)
-          if (parsedCfg && !settingsText) setConfig(parsedCfg)
-          setLayers(prev => syncLayersFromElements(parsed, zipLayers ?? prev))
-          if (!zipActiveLayer) setActiveLayer('Default')
-          setSelectedLabels(new Set()); setOverrides({}); setHistory([])
-        }
-      }
-      if (pathsText) {
-        const { beamPaths: parsed } = parseBeamPathsCsv(pathsText)
-        setBeamPaths(parsed); setEditingPath(null)
-        const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
-        setVisiblePaths(vis)
-      }
-      if (bgText) {
-        const { bgGroups: parsed } = parseBgObjectsCsv(bgText)
-        setBgGroups(parsed); setEditingBgGroup(null)
-        const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
-        setVisibleBg(vis)
-      }
       setError(null)
-    } catch (e) { setError('Load project failed: ' + e.message) }
+      setZipUpload({ fileName: file.name, settingsText, elemText, pathsText, bgText, customSvgMap })
+      setZipStage('choose')
+    } catch (e) {
+      setError('Load project failed: ' + e.message)
+      zipFileRef.current.value = ''
+    }
+  }
+
+  function cancelZipUpload() {
+    setZipUpload(null)
+    setZipStage(null)
+    setZipNewName('')
     zipFileRef.current.value = ''
+  }
+
+  function finishZipUpload() {
+    setZipUpload(null)
+    setZipStage(null)
+    zipFileRef.current.value = ''
+  }
+
+  // "Open as New Project": full replace, then persisted as a new, separately-named slot
+  function applyZipAsNewProject(name) {
+    const trimmed = name.trim() || 'Untitled'
+    const { settingsText, elemText, pathsText, bgText, customSvgMap } = zipUpload
+
+    let newSettings = { ...settings }, newConfig = DEFAULT_CONFIG, newSymbolDefs = { ...DEFAULT_SYMBOL_DEFS }
+    let newLayers = { Default: true }, newActiveLayer = 'Default'
+    if (settingsText) {
+      try {
+        const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
+        if (s)  newSettings = { ...newSettings, ...s }
+        if (c)  newConfig = c
+        if (l)  newLayers = l
+        if (al) newActiveLayer = al
+        if (sd) {
+          newSymbolDefs = {}
+          for (const [type, def] of Object.entries(sd)) {
+            newSymbolDefs[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
+          }
+        }
+      } catch {}
+    }
+
+    let newElements = []
+    if (elemText) {
+      const { elements: parsed, config: parsedCfg } = parseElementsCsv(elemText)
+      newElements = parsed
+      if (parsedCfg && !settingsText) newConfig = parsedCfg
+      newLayers = syncLayersFromElements(parsed, newLayers)
+    }
+
+    let newBeamPaths = {}, newVisiblePaths = {}
+    if (pathsText) {
+      const { beamPaths: parsed } = parseBeamPathsCsv(pathsText)
+      newBeamPaths = parsed
+      Object.keys(parsed).forEach(k => { newVisiblePaths[k] = true })
+    }
+
+    let newBgGroups = {}, newVisibleBg = {}
+    if (bgText) {
+      const { bgGroups: parsed } = parseBgObjectsCsv(bgText)
+      newBgGroups = parsed
+      Object.keys(parsed).forEach(k => { newVisibleBg[k] = true })
+    }
+
+    const newState = {
+      elements: newElements, overrides: {}, beamPaths: newBeamPaths, bgGroups: newBgGroups,
+      visiblePaths: newVisiblePaths, visibleBg: newVisibleBg, settings: newSettings, config: newConfig,
+      symbolDefs: newSymbolDefs, sidebarWidth, layers: newLayers, activeLayer: newActiveLayer,
+    }
+    applyProjectState(newState)
+    saveProjectSlot(trimmed, null, newState)
+    cancelZipUpload()
+  }
+
+  // "Overwrite Current Project": elements, paths, objects, then settings — one decision at a time
+  function startZipOverwriteFlow() {
+    setZipStage(null)
+    advanceZipQueue(['elements', 'paths', 'objects', 'settings'])
+  }
+
+  function advanceZipQueue(queue) {
+    if (!queue.length) { finishZipUpload(); return }
+    const [kind, ...rest] = queue
+    const next = () => advanceZipQueue(rest)
+
+    if (kind === 'settings') {
+      if (!zipUpload.settingsText) { next(); return }
+      setZipSettingsPrompt({ next })
+      return
+    }
+
+    if (kind === 'elements') {
+      if (!zipUpload.elemText) { next(); return }
+      const { elements: parsed, config: parsedCfg, error: err } = parseElementsCsv(zipUpload.elemText)
+      if (err && !parsed.length) { setError(err); next(); return }
+      if (elements.length) setUploadConflict({ kind: 'elements', parsed, parsedCfg, next })
+      else { applyElementsUpload(parsed, parsedCfg, false); next() }
+      return
+    }
+    if (kind === 'paths') {
+      if (!zipUpload.pathsText) { next(); return }
+      const { beamPaths: parsed } = parseBeamPathsCsv(zipUpload.pathsText)
+      if (Object.keys(beamPaths).length) setUploadConflict({ kind: 'paths', parsed, next })
+      else { applyPathsUpload(parsed, false); next() }
+      return
+    }
+    if (kind === 'objects') {
+      if (!zipUpload.bgText) { next(); return }
+      const { bgGroups: parsed, error: err } = parseBgObjectsCsv(zipUpload.bgText)
+      if (err) { setError(err); next(); return }
+      if (Object.keys(bgGroups).length) setUploadConflict({ kind: 'objects', parsed, next })
+      else { applyBgUpload(parsed, false); next() }
+    }
+  }
+
+  function applyZipSettings() {
+    const { next } = zipSettingsPrompt
+    const { settingsText, customSvgMap } = zipUpload
+    try {
+      const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
+      if (s)  setSettings(prev => ({ ...prev, ...s }))
+      if (c)  setConfig(c)
+      if (l)  setLayers(l)
+      if (al) setActiveLayer(al)
+      if (sd) {
+        const resolved = {}
+        for (const [type, def] of Object.entries(sd)) {
+          resolved[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
+        }
+        setSymbolDefs(resolved)
+      }
+    } catch {}
+    setZipSettingsPrompt(null)
+    next()
+  }
+
+  function skipZipSettings() {
+    const { next } = zipSettingsPrompt
+    setZipSettingsPrompt(null)
+    next()
   }
 
   // ── File I/O ───────────────────────────────────────────────────────────────
@@ -745,10 +888,8 @@ export default function App() {
       const { elements: parsed, config: parsedCfg, error: parseErr } = parseElementsCsv(e.target.result)
       if (parseErr && !parsed.length) { setError(parseErr); return }
       setError(null)
-      setElements(parsed)
-      if (parsedCfg) setConfig(parsedCfg)
-      setLayers(prev => syncLayersFromElements(parsed, prev))
-      setSelectedLabels(new Set()); setOverrides({}); setHistory([])
+      if (elements.length) setUploadConflict({ kind: 'elements', parsed, parsedCfg })
+      else applyElementsUpload(parsed, parsedCfg, false)
     }
     reader.readAsText(file)
     elemFileRef.current.value = ''
@@ -759,10 +900,8 @@ export default function App() {
     const reader = new FileReader()
     reader.onload = e => {
       const { beamPaths: parsed } = parseBeamPathsCsv(e.target.result)
-      setBeamPaths(parsed)
-      setEditingPath(null)
-      const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
-      setVisiblePaths(vis)
+      if (Object.keys(beamPaths).length) setUploadConflict({ kind: 'paths', parsed })
+      else applyPathsUpload(parsed, false)
     }
     reader.readAsText(file)
     pathFileRef.current.value = ''
@@ -774,13 +913,216 @@ export default function App() {
     reader.onload = e => {
       const { bgGroups: parsed, error: parseErr } = parseBgObjectsCsv(e.target.result)
       if (parseErr) { setError(parseErr); return }
+      if (Object.keys(bgGroups).length) setUploadConflict({ kind: 'objects', parsed })
+      else applyBgUpload(parsed, false)
+    }
+    reader.readAsText(file)
+    bgFileRef.current.value = ''
+  }
+
+  // Appending re-labels any incoming element whose label collides with an existing one.
+  function applyElementsUpload(parsed, parsedCfg, append) {
+    if (append) {
+      pushHistory()
+      setElements(els => {
+        const usedLabels = new Set(els.map(el => el.label))
+        const relabeled = parsed.map(el => {
+          if (!usedLabels.has(el.label)) { usedLabels.add(el.label); return el }
+          const candidate = suggestAltLabel(el.label, usedLabels)
+          usedLabels.add(candidate)
+          return { ...el, label: candidate }
+        })
+        return [...els, ...relabeled]
+      })
+      setLayers(prev => syncLayersFromElements(parsed, prev))
+    } else {
+      setElements(parsed)
+      if (parsedCfg) setConfig(parsedCfg)
+      setLayers(prev => syncLayersFromElements(parsed, prev))
+      setSelectedLabels(new Set()); setOverrides({}); setHistory([])
+    }
+    setUploadConflict(null)
+  }
+
+  // Appending merges edges into any path with a matching name, otherwise adds the path.
+  function applyPathsUpload(parsed, append) {
+    if (append) {
+      pushHistory()
+      setBeamPaths(bp => {
+        const next = { ...bp }
+        Object.entries(parsed).forEach(([name, data]) => {
+          next[name] = next[name]
+            ? { ...next[name], edges: [...(next[name].edges ?? []), ...(data.edges ?? [])] }
+            : data
+        })
+        return next
+      })
+      setVisiblePaths(vp => {
+        const next = { ...vp }
+        Object.keys(parsed).forEach(name => { if (!(name in next)) next[name] = true })
+        return next
+      })
+    } else {
+      setBeamPaths(parsed)
+      setEditingPath(null)
+      const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
+      setVisiblePaths(vis)
+    }
+    setUploadConflict(null)
+  }
+
+  // Appending merges edges into any group with a matching name, otherwise adds the group.
+  function applyBgUpload(parsed, append) {
+    if (append) {
+      pushHistory()
+      setBgGroups(g => {
+        const next = { ...g }
+        Object.entries(parsed).forEach(([name, data]) => {
+          next[name] = next[name]
+            ? { ...next[name], edges: [...(next[name].edges ?? []), ...(data.edges ?? [])] }
+            : data
+        })
+        return next
+      })
+      setVisibleBg(v => {
+        const next = { ...v }
+        Object.keys(parsed).forEach(name => { if (!(name in next)) next[name] = true })
+        return next
+      })
+    } else {
       setBgGroups(parsed)
       setEditingBgGroup(null)
       const vis = {}; Object.keys(parsed).forEach(k => { vis[k] = true })
       setVisibleBg(vis)
     }
+    setUploadConflict(null)
+  }
+
+  // `next`, when present, continues a multi-file project-ZIP upload after this decision.
+  function resolveUploadConflict(append) {
+    if (!uploadConflict) return
+    const { kind, parsed, parsedCfg, next } = uploadConflict
+    if (kind === 'elements' && append) {
+      const existingLabels = new Set(elements.map(el => el.label))
+      const collidingCount = parsed.filter(el => existingLabels.has(el.label)).length
+      if (collidingCount > 0) {
+        setUploadConflict(null)
+        setLabelCollisionPrompt({ parsed, parsedCfg, count: collidingCount, next })
+        return
+      }
+    }
+    if (kind === 'elements') applyElementsUpload(parsed, parsedCfg, append)
+    else if (kind === 'paths') applyPathsUpload(parsed, append)
+    else if (kind === 'objects') applyBgUpload(parsed, append)
+    next?.()
+  }
+
+  function dismissUploadConflict() {
+    const next = uploadConflict?.next
+    setUploadConflict(null)
+    next?.()
+  }
+
+  // ── O-number collision resolution (element append only) ───────────────────
+  function autoResolveLabelCollisions() {
+    const { parsed, parsedCfg, next } = labelCollisionPrompt
+    setLabelCollisionPrompt(null)
+    applyElementsUpload(parsed, parsedCfg, true)
+    next?.()
+  }
+
+  function dismissLabelCollisionPrompt() {
+    const next = labelCollisionPrompt?.next
+    setLabelCollisionPrompt(null)
+    next?.()
+  }
+
+  function startManualLabelResolve() {
+    const { parsed, parsedCfg, next } = labelCollisionPrompt
+    const usedLabels = new Set(elements.map(el => el.label))
+    const queue = []
+    parsed.forEach((el, i) => { if (usedLabels.has(el.label)) queue.push(i) })
+    setLabelCollisionPrompt(null)
+    const firstIdx = queue[0]
+    setManualRelabel({
+      parsed, parsedCfg, next,
+      resolvedLabels: parsed.map(el => el.label),
+      queue, step: 0, usedLabels,
+      value: suggestAltLabel(parsed[firstIdx].label, usedLabels),
+    })
+  }
+
+  function confirmManualRelabelStep() {
+    if (!manualRelabel) return
+    const { parsed, parsedCfg, next, resolvedLabels, queue, step, usedLabels, value } = manualRelabel
+    const trimmed = value.trim()
+    if (!trimmed || usedLabels.has(trimmed)) return
+    const nextUsed = new Set(usedLabels); nextUsed.add(trimmed)
+    const nextResolved = [...resolvedLabels]; nextResolved[queue[step]] = trimmed
+    const nextStep = step + 1
+    if (nextStep >= queue.length) {
+      const finalElements = parsed.map((el, i) => ({ ...el, label: nextResolved[i] }))
+      setManualRelabel(null)
+      applyElementsUpload(finalElements, parsedCfg, true)
+      next?.()
+      return
+    }
+    setManualRelabel({
+      parsed, parsedCfg, next, resolvedLabels: nextResolved, queue, step: nextStep, usedLabels: nextUsed,
+      value: suggestAltLabel(parsed[queue[nextStep]].label, nextUsed),
+    })
+  }
+
+  function dismissManualRelabel() {
+    const next = manualRelabel?.next
+    setManualRelabel(null)
+    next?.()
+  }
+
+  // ── Drag-and-drop upload ────────────────────────────────────────────────────
+  function applyInferredCsv(kind, file) {
+    if (kind === 'elements') loadElementsFile(file)
+    else if (kind === 'paths') loadPathsFile(file)
+    else if (kind === 'objects') loadBgFile(file)
+  }
+
+  function handleDroppedFile(file) {
+    const ext = file.name.toLowerCase().split('.').pop()
+    if (ext === 'zip')  { handleProjectZipFile(file); return }
+    if (ext === 'json') { loadSettingsFile(file); return }
+    if (ext !== 'csv') { setError(`Unsupported file "${file.name}" — drop a .csv, .json, or .zip file.`); return }
+
+    const byName = inferCsvKindFromName(file.name)
+    if (byName) { applyInferredCsv(byName, file); return }
+
+    const reader = new FileReader()
+    reader.onload = e => {
+      const byHeader = inferCsvKindFromHeader(e.target.result)
+      if (byHeader) applyInferredCsv(byHeader, file)
+      else setDropAmbiguous({ file })
+    }
     reader.readAsText(file)
-    bgFileRef.current.value = ''
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault()
+    if (!e.dataTransfer.types.includes('Files')) return
+    dragCounterRef.current++
+    setDragActive(true)
+  }
+  function handleDragOver(e) {
+    if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+  }
+  function handleDragLeave(e) {
+    e.preventDefault()
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+    if (dragCounterRef.current === 0) setDragActive(false)
+  }
+  function handleDrop(e) {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setDragActive(false)
+    Array.from(e.dataTransfer.files || []).forEach(handleDroppedFile)
   }
 
   async function saveElementsCSV() {
@@ -1046,7 +1388,23 @@ export default function App() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="app">
+    <div className="app"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragActive && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'color-mix(in srgb, var(--bg-sidebar) 85%, transparent)',
+          border: '3px dashed var(--accent-bright)', boxSizing: 'border-box',
+          pointerEvents: 'none', fontSize: 18, fontWeight: 600, color: 'var(--text)',
+        }}>
+          Drop a .csv, .json, or .zip file to upload
+        </div>
+      )}
       <header className="app-header">
         <span className="app-title">👁️ Optical Table Designer</span>
         {currentProjectName && <span className="project-name-badge">{currentProjectName}</span>}
@@ -1056,22 +1414,25 @@ export default function App() {
             <button className="file-btn" onClick={() => setFileMenuOpen(o => !o)}>File ▾</button>
             {fileMenuOpen && (
               <div className="file-menu-dropdown">
-                <div className="file-menu-label">Load</div>
-                <button className="file-menu-item" onClick={() => { elemFileRef.current.click(); setFileMenuOpen(false) }}>Load Elements…</button>
-                <button className="file-menu-item" onClick={() => { pathFileRef.current.click(); setFileMenuOpen(false) }}>Load Paths…</button>
-                <button className="file-menu-item" onClick={() => { bgFileRef.current.click(); setFileMenuOpen(false) }}>Load Objects…</button>
-                <button className="file-menu-item" onClick={() => { settingsFileRef.current.click(); setFileMenuOpen(false) }}>Load Settings…</button>
+                <div className="file-menu-label">Upload</div>
+                <button className="file-menu-item" onClick={() => { elemFileRef.current.click(); setFileMenuOpen(false) }}>Upload Elements…</button>
+                <button className="file-menu-item" onClick={() => { pathFileRef.current.click(); setFileMenuOpen(false) }}>Upload Paths…</button>
+                <button className="file-menu-item" onClick={() => { bgFileRef.current.click(); setFileMenuOpen(false) }}>Upload Objects…</button>
+                <button className="file-menu-item" onClick={() => { settingsFileRef.current.click(); setFileMenuOpen(false) }}>Upload Settings…</button>
+                <button className="file-menu-item" onClick={() => { zipFileRef.current.click(); setFileMenuOpen(false) }}>Upload Project…</button>
                 <div className="file-menu-sep" />
-                <div className="file-menu-label">Save</div>
-                <button className="file-menu-item" onClick={() => { saveElementsCSV(); setFileMenuOpen(false) }} disabled={!effectiveElements.length}>Save Elements</button>
-                <button className="file-menu-item" onClick={() => { savePathsCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(beamPaths).length}>Save Paths</button>
-                <button className="file-menu-item" onClick={() => { saveBgCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(bgGroups).length}>Save Objects</button>
-                <button className="file-menu-item" onClick={() => { saveSettingsJSON(); setFileMenuOpen(false) }}>Save Settings</button>
+                <div className="file-menu-label">Download</div>
+                <button className="file-menu-item" onClick={() => { saveElementsCSV(); setFileMenuOpen(false) }} disabled={!effectiveElements.length}>Download Elements</button>
+                <button className="file-menu-item" onClick={() => { savePathsCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(beamPaths).length}>Download Paths</button>
+                <button className="file-menu-item" onClick={() => { saveBgCSV(); setFileMenuOpen(false) }} disabled={!Object.keys(bgGroups).length}>Download Objects</button>
+                <button className="file-menu-item" onClick={() => { saveSettingsJSON(); setFileMenuOpen(false) }}>Download Settings</button>
+                <button className="file-menu-item" onClick={() => { saveProject(); setFileMenuOpen(false) }}>Download Project</button>
                 <div className="file-menu-sep" />
                 <div className="file-menu-label">Projects</div>
                 <button className="file-menu-item" onClick={() => { setNewProjName(''); setNewProjPromptOpen(true); setFileMenuOpen(false) }}>New Project…</button>
-                <button className="file-menu-item" onClick={() => { setProjectsModalOpen(true); setFileMenuOpen(false) }}>Open Project…</button>
-                <button className="file-menu-item" onClick={() => { setSaveAsProjName(currentProjectName ?? ''); setSaveAsPromptOpen(true); setFileMenuOpen(false) }}>Save Project As…</button>
+                <button className="file-menu-item" onClick={() => { setProjectsModalOpen(true); setFileMenuOpen(false) }}>Switch Project…</button>
+                <button className="file-menu-item" onClick={() => { setSaveAsProjName(currentProjectName ?? ''); setSaveAsPromptOpen(true); setFileMenuOpen(false) }}>Rename Project…</button>
+                <button className="file-menu-item" onClick={() => { setDupProjName(currentProjectName ? `${currentProjectName} copy` : ''); setDupProjPromptOpen(true); setFileMenuOpen(false) }}>Save Project As…</button>
               </div>
             )}
           </div>
@@ -1085,9 +1446,6 @@ export default function App() {
               </div>
             )}
           </div>
-          <span className="hdr-sep" />
-          <button className="file-btn" onClick={() => zipFileRef.current.click()}>Open Project</button>
-          <button className="file-btn" onClick={saveProject}>Save Project</button>
           <span className="hdr-sep" />
           <button className="file-btn file-btn-accent" onClick={handleExportPDF} disabled={!effectiveElements.length}>Export PDF</button>
         </div>
@@ -1197,8 +1555,6 @@ export default function App() {
           onConfigChange={setConfig}
           settings={settings}
           onSettingsChange={setSettings}
-          onSaveSettings={saveSettingsJSON}
-          onLoadSettings={() => settingsFileRef.current.click()}
           symbolDefs={symbolDefs}
           onAddSymbolDef={addSymbolDef}
           onUpdateSymbolDef={updateSymbolDef}
@@ -1263,19 +1619,44 @@ export default function App() {
       {saveAsPromptOpen && (
         <div className="modal-backdrop" onClick={() => setSaveAsPromptOpen(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-title">Save Project As</div>
+            <div className="modal-title">Rename Project</div>
             <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
               placeholder="Project name"
               value={saveAsProjName}
               onChange={e => setSaveAsProjName(e.target.value)}
               autoFocus
               onKeyDown={e => {
-                if (e.key === 'Enter') { saveProjectSlot(saveAsProjName, null); setSaveAsPromptOpen(false) }
+                if (e.key === 'Enter') { saveProjectSlot(saveAsProjName, currentProjectId); setSaveAsPromptOpen(false) }
                 if (e.key === 'Escape') setSaveAsPromptOpen(false)
               }} />
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button className="small-btn" onClick={() => { saveProjectSlot(saveAsProjName, null); setSaveAsPromptOpen(false) }}>Save</button>
+              <button className="small-btn" onClick={() => { saveProjectSlot(saveAsProjName, currentProjectId); setSaveAsPromptOpen(false) }}>Rename</button>
               <button className="small-btn" onClick={() => setSaveAsPromptOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Save Project As (duplicate) prompt ───────────────────────────────── */}
+      {dupProjPromptOpen && (
+        <div className="modal-backdrop" onClick={() => setDupProjPromptOpen(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Save Project As</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+              Creates a new project with the current files, leaving the original project untouched.
+            </p>
+            <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder="Project name"
+              value={dupProjName}
+              onChange={e => setDupProjName(e.target.value)}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') { saveProjectSlot(dupProjName, null); setDupProjPromptOpen(false) }
+                if (e.key === 'Escape') setDupProjPromptOpen(false)
+              }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="small-btn" onClick={() => { saveProjectSlot(dupProjName, null); setDupProjPromptOpen(false) }}>Save</button>
+              <button className="small-btn" onClick={() => setDupProjPromptOpen(false)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1288,7 +1669,7 @@ export default function App() {
         return (
           <div className="modal-backdrop" onClick={() => setProjectsModalOpen(false)}>
             <div className="modal-box modal-box-wide" onClick={e => e.stopPropagation()}>
-              <div className="modal-title">Open Project</div>
+              <div className="modal-title">Switch Project</div>
               {entries.length === 0
                 ? <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '8px 0' }}>No saved projects.</p>
                 : (
@@ -1312,6 +1693,171 @@ export default function App() {
         )
       })()}
 
+      {/* ── Upload conflict (replace vs. append) prompt ─────────────────────── */}
+      {uploadConflict && (() => {
+        const label = uploadConflict.kind === 'elements' ? 'elements'
+          : uploadConflict.kind === 'paths' ? 'beam paths' : 'background objects'
+        return (
+          <div className="modal-backdrop" onClick={dismissUploadConflict}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Project already has {label}</div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+                Replace the current {label} with the uploaded file, or append the uploaded {label} to what's already there?
+              </p>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="small-btn" onClick={() => resolveUploadConflict(true)}>Append</button>
+                <button className="small-btn" onClick={() => resolveUploadConflict(false)}>Replace</button>
+                <button className="small-btn" onClick={dismissUploadConflict}>{uploadConflict.next ? 'Skip' : 'Cancel'}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── O-number collision: auto vs. manual resolve ─────────────────────── */}
+      {labelCollisionPrompt && (
+        <div className="modal-backdrop" onClick={dismissLabelCollisionPrompt}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Label collisions found</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+              {labelCollisionPrompt.count} uploaded element{labelCollisionPrompt.count !== 1 ? 's' : ''} share a label with an existing element.
+              Auto-resolve renames them automatically (e.g. O-12 → O-12_2), or resolve each one manually.
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="small-btn" onClick={autoResolveLabelCollisions}>Auto-resolve</button>
+              <button className="small-btn" onClick={startManualLabelResolve}>Resolve manually</button>
+              <button className="small-btn" onClick={dismissLabelCollisionPrompt}>{labelCollisionPrompt.next ? 'Skip' : 'Cancel'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── O-number collision: manual, one-at-a-time relabel ────────────────── */}
+      {manualRelabel && (() => {
+        const trimmedVal = manualRelabel.value.trim()
+        const isDup = trimmedVal !== '' && manualRelabel.usedLabels.has(trimmedVal)
+        const isEmpty = trimmedVal === ''
+        const idx = manualRelabel.queue[manualRelabel.step]
+        const originalLabel = manualRelabel.parsed[idx].label
+        const isLast = manualRelabel.step + 1 >= manualRelabel.queue.length
+        return (
+          <div className="modal-backdrop" onClick={dismissManualRelabel}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Resolve label {manualRelabel.step + 1} of {manualRelabel.queue.length}</div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+                "{originalLabel}" already exists in the project. Choose a new label for the uploaded element.
+              </p>
+              <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+                value={manualRelabel.value}
+                autoFocus
+                onChange={e => setManualRelabel(mr => ({ ...mr, value: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !isDup && !isEmpty) confirmManualRelabelStep()
+                  if (e.key === 'Escape') dismissManualRelabel()
+                }} />
+              {isDup && <div style={{ color: '#e06c75', fontSize: 11, marginTop: 4 }}>That label is already taken.</div>}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="small-btn" disabled={isDup || isEmpty} onClick={confirmManualRelabelStep}>
+                  {isLast ? 'Finish' : 'Next'}
+                </button>
+                <button className="small-btn" onClick={dismissManualRelabel}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Dropped CSV of unclear type ──────────────────────────────────────── */}
+      {dropAmbiguous && (
+        <div className="modal-backdrop" onClick={() => setDropAmbiguous(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">What kind of file is "{dropAmbiguous.file.name}"?</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+              Couldn't tell from the file name or contents — choose what to upload it as.
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="small-btn" onClick={() => { applyInferredCsv('elements', dropAmbiguous.file); setDropAmbiguous(null) }}>Elements</button>
+              <button className="small-btn" onClick={() => { applyInferredCsv('paths', dropAmbiguous.file); setDropAmbiguous(null) }}>Beam Paths</button>
+              <button className="small-btn" onClick={() => { applyInferredCsv('objects', dropAmbiguous.file); setDropAmbiguous(null) }}>Background Objects</button>
+              <button className="small-btn" onClick={() => setDropAmbiguous(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Project ZIP upload: new project vs. overwrite current ────────────── */}
+      {zipUpload && zipStage === 'choose' && (() => {
+        const present = [
+          zipUpload.elemText     && 'elements',
+          zipUpload.pathsText    && 'beam paths',
+          zipUpload.bgText       && 'background objects',
+          zipUpload.settingsText && 'settings',
+        ].filter(Boolean)
+        return (
+          <div className="modal-backdrop" onClick={cancelZipUpload}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Upload project "{zipUpload.fileName}"</div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+                Contains: {present.length ? present.join(', ') : 'no recognised files'}.
+                Open it as a separate new project, or merge it into the current project one file at a time?
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button className="small-btn" disabled={!present.length}
+                  onClick={() => { setZipNewName(zipUpload.fileName.replace(/\.zip$/i, '')); setZipStage('newName') }}>
+                  Open as New Project…
+                </button>
+                <button className="small-btn" disabled={!present.length} onClick={startZipOverwriteFlow}>
+                  Overwrite Current Project…
+                </button>
+                <button className="small-btn" onClick={cancelZipUpload}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {zipUpload && zipStage === 'newName' && (
+        <div className="modal-backdrop" onClick={cancelZipUpload}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Name the new project</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+              The uploaded files become a new project, saved separately from the current one.
+            </p>
+            <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder="Project name"
+              value={zipNewName}
+              autoFocus
+              onChange={e => setZipNewName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') applyZipAsNewProject(zipNewName)
+                if (e.key === 'Escape') cancelZipUpload()
+              }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="small-btn" onClick={() => applyZipAsNewProject(zipNewName)}>Create</button>
+              <button className="small-btn" onClick={() => setZipStage('choose')}>Back</button>
+              <button className="small-btn" onClick={cancelZipUpload}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Project ZIP overwrite: settings step ─────────────────────────────── */}
+      {zipSettingsPrompt && (
+        <div className="modal-backdrop" onClick={skipZipSettings}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Overwrite settings?</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+              The uploaded project includes settings (canvas scale, table size, grid, symbol library, layers).
+              Apply them, or keep the current settings?
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="small-btn" onClick={applyZipSettings}>Overwrite settings</button>
+              <button className="small-btn" onClick={skipZipSettings}>Keep current</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <input ref={elemFileRef} type="file" accept=".csv" style={{ display: 'none' }}
         onChange={e => loadElementsFile(e.target.files[0])} />
       <input ref={pathFileRef} type="file" accept=".csv" style={{ display: 'none' }}
@@ -1321,7 +1867,7 @@ export default function App() {
       <input ref={settingsFileRef} type="file" accept=".json" style={{ display: 'none' }}
         onChange={e => loadSettingsFile(e.target.files[0])} />
       <input ref={zipFileRef} type="file" accept=".zip" style={{ display: 'none' }}
-        onChange={e => loadProjectZip(e.target.files[0])} />
+        onChange={e => handleProjectZipFile(e.target.files[0])} />
     </div>
   )
 }
