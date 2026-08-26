@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react'
-import ElementShape from './ElementShape'
+import ElementShape, { lookupSymbolDef } from './ElementShape'
 import { exportSVGToPDF } from '../utils/pdfExport'
 
 const PAD = 2
@@ -20,6 +20,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   onSelectLabel, onStartEdit, onUpdateEdit, onDeleteSelected, onHardDeleteSelected,
   editingPath, onAddEdge, onDeleteEdge, onSetEditingPath,
   editingBgGroup, onAddBgEdge, onDeleteBgEdge, onSetEditingBgGroup,
+  bgImages, onUpdateBgImage, onStartBgImageEdit,
+  editingBgImage, onSetEditingBgImage,
   symbolDefs,
   settings,
   searchHighlights,
@@ -101,7 +103,9 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         if (pendingSrc)     { setPendingSrc(null); return }
         if (editingBgGroup) { onSetEditingBgGroup(null); return }
         if (editingPath)    { onSetEditingPath(null); return }
-        setMode('select'); return
+        if (editingBgImage) { onSetEditingBgImage?.(null); return }
+        if (mode !== 'select') { setMode('select'); return }
+        if (selectedLabels?.size) { onSelectLabel(null, false); return }
       }
 
       if (e.key === 'b' || e.key === 'B') { e.preventDefault(); setMode('boxSelect'); return }
@@ -137,8 +141,10 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [selectedLabels, selectedElement, elements, mode, editingPath, editingBgGroup,
+      editingBgImage,
       pendingSrc, pendingBgPt, settings, onDeleteSelected, onHardDeleteSelected,
-      onStartEdit, onUpdateEdit, onSetEditingPath, onSetEditingBgGroup])
+      onStartEdit, onUpdateEdit, onSetEditingPath, onSetEditingBgGroup,
+      onSetEditingBgImage])
 
   // ── Element click / drag start ────────────────────────────────────────────
   function onElementMouseDown(e, el) {
@@ -297,6 +303,37 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       return
     }
 
+    if (type === 'bgImageMove') {
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      const dxPhys =  (svgPos.x - drag.current.startSVG.x) / SCALE
+      const dyPhys = -(svgPos.y - drag.current.startSVG.y) / SCALE
+      let newX = drag.current.startX + dxPhys
+      let newY = drag.current.startY + dyPhys
+      // Skip snap on Shift for pixel-level positioning of reference photos.
+      if (!e.shiftKey) {
+        const s = settings.snapSpacing
+        newX = Math.round(newX / s) * s
+        newY = Math.round(newY / s) * s
+      }
+      onUpdateBgImage(drag.current.name, { x: newX, y: newY })
+      return
+    }
+
+    if (type === 'bgImageResize') {
+      // Corner handle sits at the top-right of the image on screen (bottom-right
+      // in physics coords is the SVG top-right because y is flipped). Dragging
+      // it changes widthIn; height auto-follows via aspect.
+      const svgPos = screenToSVG(e.clientX, e.clientY)
+      const dxPhys = (svgPos.x - drag.current.startSVG.x) / SCALE
+      let newWidth = drag.current.startWidthIn + dxPhys
+      if (!e.shiftKey) {
+        const s = settings.snapSpacing
+        newWidth = Math.round(newWidth / s) * s
+      }
+      if (newWidth >= 0.25) onUpdateBgImage(drag.current.name, { widthIn: newWidth })
+      return
+    }
+
     if (type === 'rotate') {
       const svgPos = screenToSVG(e.clientX, e.clientY)
       const { startPhys, startOrientations, startAngle } = drag.current
@@ -417,6 +454,86 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     return { nx: -dy / len, ny: dx / len }
   }
 
+  // ── Background image rendering ────────────────────────────────────────────
+  function onBgImageMouseDown(e, name, img) {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    onStartBgImageEdit?.()
+    const startSVG = screenToSVG(e.clientX, e.clientY)
+    drag.current = {
+      type: 'bgImageMove',
+      name,
+      startX: img.x, startY: img.y,
+      startSVG,
+      hasMoved: false,
+    }
+  }
+
+  function onBgImageResizeMouseDown(e, name, img) {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    onStartBgImageEdit?.()
+    drag.current = {
+      type: 'bgImageResize',
+      name,
+      startWidthIn: img.widthIn,
+      startSVG: screenToSVG(e.clientX, e.clientY),
+      hasMoved: false,
+    }
+  }
+
+  function renderBgImages() {
+    if (!bgImages) return null
+    return Object.entries(bgImages).map(([name, img]) => {
+      if (img.visible === false) return null
+      const isEditing = name === editingBgImage
+      const heightIn = img.widthIn * img.aspect
+      // physY grows up but SVG y grows down, so anchor at the top-left in SVG
+      // space, which corresponds to the image's top edge (y + heightIn) on the table.
+      const sx = px(img.x)
+      const sy = py(img.y + heightIn)
+      const sw = img.widthIn * SCALE
+      const sh = heightIn * SCALE
+      // Handle size scales inversely with zoom so it stays clickable at any zoom.
+      const handleR = 5 / transform.k
+      return (
+        <g key={`bgimg-${name}`}>
+          <image
+            href={img.href}
+            x={sx} y={sy} width={sw} height={sh}
+            opacity={img.opacity ?? 1}
+            preserveAspectRatio="none"
+            // pointerEvents 'none' when not being edited so the image is inert
+            // — clicks pass through to the elements/beams underneath and there
+            // is no drag cursor to suggest it moves.
+            style={{
+              pointerEvents: isEditing ? 'auto' : 'none',
+              cursor: isEditing ? 'move' : 'default',
+            }}
+            onMouseDown={isEditing ? e => onBgImageMouseDown(e, name, img) : undefined}
+          />
+          {isEditing && (
+            <>
+              <rect x={sx} y={sy} width={sw} height={sh}
+                fill="none"
+                stroke="var(--accent-bright, #1a8abf)"
+                strokeWidth={1 / transform.k}
+                strokeDasharray={`${3 / transform.k} ${2 / transform.k}`}
+                pointerEvents="none" />
+              {/* Corner handle at SVG top-right (physics bottom-right). */}
+              <circle cx={sx + sw} cy={sy} r={handleR}
+                fill="var(--accent-bright, #1a8abf)"
+                stroke="#fff"
+                strokeWidth={1 / transform.k}
+                style={{ cursor: 'nesw-resize' }}
+                onMouseDown={e => onBgImageResizeMouseDown(e, name, img)} />
+            </>
+          )}
+        </g>
+      )
+    })
+  }
+
   // ── Background object rendering ───────────────────────────────────────────
   function renderBgEdges() {
     const out = []
@@ -520,11 +637,17 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             <line x1={x1} y1={y1} x2={x2} y2={y2}
               stroke={color} strokeWidth={isEditing ? 2 : 1}
               strokeOpacity={opacity} strokeLinecap="round" />
-            {isEditing && (
+            {isEditing ? (
               <line x1={x1} y1={y1} x2={x2} y2={y2}
                 stroke="transparent" strokeWidth={12}
                 style={{ cursor: 'pointer' }}
                 onClick={ev => { ev.stopPropagation(); onDeleteEdge(ei) }}
+              />
+            ) : (
+              <line x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="transparent" strokeWidth={12}
+                style={{ cursor: 'pointer' }}
+                onDoubleClick={ev => { ev.stopPropagation(); onSetEditingPath(name) }}
               />
             )}
           </g>
@@ -578,6 +701,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             fill="none" stroke={theme.tableBorder} strokeWidth="2"
           />
           <g>{renderCoordLabels()}</g>
+          <g>{renderBgImages()}</g>
           <g>{renderBgEdges()}</g>
           <g>{renderBeamEdges()}</g>
 
@@ -609,7 +733,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                     settings.showType      ? el.type       : null,
                     settings.showAnnotation ? el.Annotation : null,
                   ].filter(Boolean)
-                  const labelY   = Math.min(-6, -8 / transform.k)
+                  // Clear the element's rotated bounding box so labels
+                  // don't overlap large icons — accounts for orientation
+                  // so a wide-and-short icon isn't pushed unnecessarily
+                  // far at neutral rotation.
+                  const def = lookupSymbolDef(symbolDefs, (el.type || '').toLowerCase().trim())
+                  const dH = def?.displayH ?? 0
+                  const dW = def ? (def.w / def.h) * dH : 0
+                  const rad = ((el.orientation ?? 0) + (def?.orientation ?? 0)) * Math.PI / 180
+                  const halfHRot = 0.5 * (Math.abs(dW * Math.sin(rad)) + Math.abs(dH * Math.cos(rad)))
+                  const labelY   = Math.min(-6, -8 / transform.k, -(halfHRot + 1.5))
                   const fontSize = Math.max(3, 8 / transform.k)
                   return parts.map((text, i) => (
                     <text key={i} x={0} y={labelY - i * fontSize * 1.2}

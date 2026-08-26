@@ -116,6 +116,8 @@ export default function App() {
   const [visiblePaths, setVisiblePaths] = useState(() => _ls?.visiblePaths ?? {})
   const [bgGroups,     setBgGroups]     = useState(() => _ls?.bgGroups     ?? {})
   const [visibleBg,    setVisibleBg]    = useState(() => _ls?.visibleBg    ?? {})
+  // Images placed as background layers. Each entry: {href, x, y, widthIn, opacity, visible}
+  const [bgImages,     setBgImages]     = useState(() => _ls?.bgImages     ?? {})
   const [error,        setError]        = useState(null)
   const [notice,       setNotice]       = useState(null)
 
@@ -124,8 +126,12 @@ export default function App() {
   const [history,    setHistory]    = useState([])
   const [editingPath,    setEditingPath]    = useState(null)
   const [editingBgGroup, setEditingBgGroup] = useState(null)
+  const [editingBgImage, setEditingBgImage] = useState(null)
 
-  const [symbolDefs, setSymbolDefs] = useState(() => _ls?.symbolDefs ?? { ...DEFAULT_SYMBOL_DEFS })
+  // Merge stored symbolDefs OVER defaults so new entries added to
+  // DEFAULT_SYMBOL_DEFS in code propagate to existing projects; per-key
+  // user overrides in storage still win.
+  const [symbolDefs, setSymbolDefs] = useState(() => ({ ...DEFAULT_SYMBOL_DEFS, ...(_ls?.symbolDefs || {}) }))
 
   const [settings, setSettings] = useState(() => _ls?.settings ?? {
     snapSpacing:      0.5,
@@ -146,6 +152,9 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
 
   const [addElemAt,    setAddElemAt]    = useState(null)
+  // Sidebar tab lives at App level so keyboard shortcuts (e.g. N) can flip to
+  // the right tab in the same synchronous update that queues their other state.
+  const [sidebarTab,   setSidebarTab]   = useState('paths')
   const [sidebarWidth, setSidebarWidth] = useState(() => _ls?.sidebarWidth ?? 280)
   const [fileMenuOpen, setFileMenuOpen] = useState(false)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
@@ -198,11 +207,12 @@ export default function App() {
       try {
         localStorage.setItem('optDesign_v1', JSON.stringify({
           elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg,
+          bgImages,
           settings, config, symbolDefs, sidebarWidth, layers, activeLayer,
         }))
       } catch {}
     }, 800)
-  }, [elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg, settings, config, symbolDefs, sidebarWidth, layers, activeLayer])
+  }, [elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg, bgImages, settings, config, symbolDefs, sidebarWidth, layers, activeLayer])
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.darkMode ? 'dark' : 'light'
@@ -257,7 +267,7 @@ export default function App() {
   const MAX_HISTORY = 100
 
   function pushHistory() {
-    setHistory(h => [...h.slice(-(MAX_HISTORY - 1)), { elements, overrides, beamPaths, bgGroups }])
+    setHistory(h => [...h.slice(-(MAX_HISTORY - 1)), { elements, overrides, beamPaths, bgGroups, bgImages }])
   }
 
   function undo() {
@@ -267,6 +277,7 @@ export default function App() {
     setOverrides(prev.overrides)
     setBeamPaths(prev.beamPaths)
     setBgGroups(prev.bgGroups)
+    if (prev.bgImages != null) setBgImages(prev.bgImages)
     setHistory(h => h.slice(0, -1))
   }
 
@@ -315,6 +326,7 @@ export default function App() {
         const snap = settings.snapSpacing ?? 0.5
         const rx = Math.round(cursorPosRef.current.x / snap) * snap
         const ry = Math.round(cursorPosRef.current.y / snap) * snap
+        setSidebarTab('elements')
         setAddElemAt({ x: rx, y: ry, label: nextOLabel(elements), type: lastAddedTypeRef.current || '' })
       }
       if ((e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey) {
@@ -554,6 +566,7 @@ export default function App() {
   // ── Project helpers ────────────────────────────────────────────────────────
   function captureProjectState() {
     return { elements, overrides, beamPaths, bgGroups, visiblePaths, visibleBg,
+             bgImages,
              settings, config, symbolDefs, sidebarWidth, layers, activeLayer }
   }
 
@@ -564,9 +577,10 @@ export default function App() {
     if (s.bgGroups     != null) setBgGroups(s.bgGroups)
     if (s.visiblePaths != null) setVisiblePaths(s.visiblePaths)
     if (s.visibleBg    != null) setVisibleBg(s.visibleBg)
+    if (s.bgImages     != null) setBgImages(s.bgImages)
     if (s.settings     != null) setSettings(prev => ({ ...prev, ...s.settings }))
     if (s.config       != null) setConfig(s.config)
-    if (s.symbolDefs   != null) setSymbolDefs(s.symbolDefs)
+    if (s.symbolDefs   != null) setSymbolDefs({ ...DEFAULT_SYMBOL_DEFS, ...s.symbolDefs })
     if (s.sidebarWidth != null) setSidebarWidth(s.sidebarWidth)
     if (s.layers       != null) setLayers(s.layers)
     if (s.activeLayer  != null) setActiveLayer(s.activeLayer)
@@ -611,7 +625,8 @@ export default function App() {
     const trimmed = name.trim() || 'Untitled'
     applyProjectState({
       elements: [], overrides: {}, beamPaths: {}, bgGroups: {},
-      visiblePaths: {}, visibleBg: {}, config: DEFAULT_CONFIG,
+      visiblePaths: {}, visibleBg: {}, bgImages: {},
+      config: DEFAULT_CONFIG,
       symbolDefs: { ...DEFAULT_SYMBOL_DEFS },
       layers: { Default: true }, activeLayer: 'Default',
     })
@@ -709,6 +724,57 @@ export default function App() {
     })
   }
 
+  // ── Background image helpers ───────────────────────────────────────────────
+  // Each entry: { href: dataURL, x, y, widthIn (inches), aspect, opacity, visible }
+  // Height falls out of widthIn * aspect at render time, so aspect follows the
+  // source file's pixels — resizing preserves the picture instead of stretching it.
+  function addBgImage(name, dataURL, aspect) {
+    const trimmed = (name || 'image').trim()
+    if (bgImages[trimmed]) {
+      // Auto-name collisions — the sidebar can rename after the fact.
+      let i = 2, candidate = `${trimmed} ${i}`
+      while (bgImages[candidate]) { i++; candidate = `${trimmed} ${i}` }
+      return addBgImage(candidate, dataURL, aspect)
+    }
+    pushHistory()
+    const cx = (config.origin_x ?? 0) + (config.table_length ?? 55) / 2
+    const cy = (config.origin_y ?? 0) + (config.table_width ?? 85) / 2
+    const widthIn = Math.min(10, (config.table_length ?? 55) / 4)
+    setBgImages(g => ({
+      ...g,
+      [trimmed]: {
+        href: dataURL,
+        x: cx - widthIn / 2,
+        y: cy - (widthIn * aspect) / 2,
+        widthIn,
+        aspect,
+        opacity: 0.6,
+        visible: true,
+      },
+    }))
+    return trimmed
+  }
+
+  function updateBgImage(name, patch) {
+    setBgImages(g => (g[name] ? { ...g, [name]: { ...g[name], ...patch } } : g))
+  }
+
+  function deleteBgImage(name) {
+    pushHistory()
+    setBgImages(g => { const n = { ...g }; delete n[name]; return n })
+  }
+
+  function renameBgImage(oldName, newName) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName || bgImages[trimmed]) return
+    pushHistory()
+    setBgImages(g => {
+      const next = {}
+      Object.entries(g).forEach(([k, v]) => { next[k === oldName ? trimmed : k] = v })
+      return next
+    })
+  }
+
   // ── Symbol def helpers ─────────────────────────────────────────────────────
   function addSymbolDef(typeName, def) {
     setSymbolDefs(d => ({ ...d, [typeName.toLowerCase()]: def }))
@@ -746,7 +812,7 @@ export default function App() {
         const { settings: s, config: c, symbolDefs: sd } = JSON.parse(e.target.result)
         if (s)  setSettings(prev => ({ ...prev, ...s }))
         if (c)  setConfig(c)
-        if (sd) setSymbolDefs(sd)
+        if (sd) setSymbolDefs({ ...DEFAULT_SYMBOL_DEFS, ...sd })
       } catch (err) { setError('Invalid settings file: ' + err.message) }
     }
     reader.readAsText(file)
@@ -777,7 +843,33 @@ export default function App() {
         }
       }
 
-      zip.file('settings.json', JSON.stringify({ settings, config, symbolDefs: processedSymbolDefs, layers, activeLayer }, null, 2))
+      // Extract image data URLs to their own files, mirroring the pattern used
+      // for custom symbol SVGs. Keeps the settings/manifest JSON small and lets
+      // people peek inside a project archive with `unzip -l`.
+      const processedBgImages = {}
+      const usedImgSlugs = new Set()
+      for (const [name, img] of Object.entries(bgImages)) {
+        if (img.href?.startsWith('data:image/')) {
+          const mime = img.href.slice(5, img.href.indexOf(';'))
+          const ext = mime.split('/')[1] === 'jpeg' ? 'jpg' : mime.split('/')[1]
+          let slug = name.replace(/[^a-z0-9._-]/gi, '_').toLowerCase()
+          if (usedImgSlugs.has(slug)) {
+            let i = 2; while (usedImgSlugs.has(`${slug}_${i}`)) i++; slug = `${slug}_${i}`
+          }
+          usedImgSlugs.add(slug)
+          const path = `background_images/${slug}.${ext}`
+          const [, b64] = img.href.split(',')
+          zip.file(path, b64, { base64: true })
+          processedBgImages[name] = { ...img, href: `/${path}` }
+        } else {
+          processedBgImages[name] = img
+        }
+      }
+
+      zip.file('settings.json', JSON.stringify({
+        settings, config, symbolDefs: processedSymbolDefs, layers, activeLayer,
+        bgImages: processedBgImages,
+      }, null, 2))
       if (elements.length)               zip.file('elements.csv',           serializeElementsCsv(elements, overrides, config))
       if (Object.keys(beamPaths).length) zip.file('beam_paths.csv',         serializeBeamPathsCsv(beamPaths))
       if (Object.keys(bgGroups).length)  zip.file('background_objects.csv', serializeBgObjectsCsv(bgGroups))
@@ -805,6 +897,19 @@ export default function App() {
             customSvgMap[`/${name}`] = `data:image/svg+xml;base64,${b64}`
           })
       )
+      // ... and background-image files, keyed by the same "/path" convention
+      // so the settings.json manifest can point back at them by reference.
+      const bgImageMap = {}
+      await Promise.all(
+        Object.keys(zip.files)
+          .filter(n => n.startsWith('background_images/'))
+          .map(async name => {
+            const ext = name.split('.').pop().toLowerCase()
+            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+            const b64 = await zip.files[name].async('base64')
+            bgImageMap[`/${name}`] = `data:${mime};base64,${b64}`
+          })
+      )
 
       const readZipFile = async name => {
         const f = zip.file(name); return f ? await f.async('string') : null
@@ -816,7 +921,7 @@ export default function App() {
         readZipFile('background_objects.csv'),
       ])
       setError(null)
-      setZipUpload({ fileName: file.name, settingsText, elemText, pathsText, bgText, customSvgMap })
+      setZipUpload({ fileName: file.name, settingsText, elemText, pathsText, bgText, customSvgMap, bgImageMap })
       setZipStage('choose')
     } catch (e) {
       setError('Load project failed: ' + e.message)
@@ -840,21 +945,28 @@ export default function App() {
   // "Open as New Project": full replace, then persisted as a new, separately-named slot
   function applyZipAsNewProject(name) {
     const trimmed = name.trim() || 'Untitled'
-    const { settingsText, elemText, pathsText, bgText, customSvgMap } = zipUpload
+    const { settingsText, elemText, pathsText, bgText, customSvgMap, bgImageMap } = zipUpload
 
     let newSettings = { ...settings }, newConfig = DEFAULT_CONFIG, newSymbolDefs = { ...DEFAULT_SYMBOL_DEFS }
     let newLayers = { Default: true }, newActiveLayer = 'Default'
+    let newBgImages = {}
     if (settingsText) {
       try {
-        const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
+        const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al,
+                bgImages: bi } = JSON.parse(settingsText)
         if (s)  newSettings = { ...newSettings, ...s }
         if (c)  newConfig = c
         if (l)  newLayers = l
         if (al) newActiveLayer = al
         if (sd) {
-          newSymbolDefs = {}
+          newSymbolDefs = { ...DEFAULT_SYMBOL_DEFS }
           for (const [type, def] of Object.entries(sd)) {
             newSymbolDefs[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
+          }
+        }
+        if (bi) {
+          for (const [k, img] of Object.entries(bi)) {
+            newBgImages[k] = bgImageMap[img.href] ? { ...img, href: bgImageMap[img.href] } : img
           }
         }
       } catch {}
@@ -886,7 +998,8 @@ export default function App() {
 
     const newState = {
       elements: newElements, overrides: {}, beamPaths: newBeamPaths, bgGroups: newBgGroups,
-      visiblePaths: newVisiblePaths, visibleBg: newVisibleBg, settings: newSettings, config: newConfig,
+      visiblePaths: newVisiblePaths, visibleBg: newVisibleBg, bgImages: newBgImages,
+      settings: newSettings, config: newConfig,
       symbolDefs: newSymbolDefs, sidebarWidth, layers: newLayers, activeLayer: newActiveLayer,
     }
     applyProjectState(newState)
@@ -937,19 +1050,27 @@ export default function App() {
 
   function applyZipSettings() {
     const { next } = zipSettingsPrompt
-    const { settingsText, customSvgMap } = zipUpload
+    const { settingsText, customSvgMap, bgImageMap } = zipUpload
     try {
-      const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al } = JSON.parse(settingsText)
+      const { settings: s, config: c, symbolDefs: sd, layers: l, activeLayer: al,
+              bgImages: bi } = JSON.parse(settingsText)
       if (s)  setSettings(prev => ({ ...prev, ...s }))
       if (c)  setConfig(c)
       if (l)  setLayers(l)
       if (al) setActiveLayer(al)
       if (sd) {
-        const resolved = {}
+        const resolved = { ...DEFAULT_SYMBOL_DEFS }
         for (const [type, def] of Object.entries(sd)) {
           resolved[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
         }
         setSymbolDefs(resolved)
+      }
+      if (bi) {
+        const resolved = {}
+        for (const [k, img] of Object.entries(bi)) {
+          resolved[k] = bgImageMap[img.href] ? { ...img, href: bgImageMap[img.href] } : img
+        }
+        setBgImages(resolved)
       }
     } catch {}
     setZipSettingsPrompt(null)
@@ -1190,14 +1311,18 @@ export default function App() {
     reader.readAsText(file)
   }
 
+  // dataTransfer.types is unreliable across browsers on dragover — Safari and
+  // some Chrome versions omit 'Files' during hover and only add it on drop.
+  // Missing preventDefault on dragover lets the browser's default kick in
+  // (opening JSON in a new tab). Just always preventDefault on both events
+  // and let handleDrop filter to actual files.
   function handleDragEnter(e) {
     e.preventDefault()
-    if (!e.dataTransfer.types.includes('Files')) return
     dragCounterRef.current++
     setDragActive(true)
   }
   function handleDragOver(e) {
-    if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+    e.preventDefault()
   }
   function handleDragLeave(e) {
     e.preventDefault()
@@ -1625,6 +1750,11 @@ export default function App() {
           onAddBgEdge={addBgEdge}
           onDeleteBgEdge={deleteBgEdge}
           onSetEditingBgGroup={setEditingBgGroup}
+          bgImages={bgImages}
+          onUpdateBgImage={updateBgImage}
+          onStartBgImageEdit={pushHistory}
+          editingBgImage={editingBgImage}
+          onSetEditingBgImage={setEditingBgImage}
           symbolDefs={symbolDefs}
           settings={settings}
           searchHighlights={searchHighlights}
@@ -1670,6 +1800,13 @@ export default function App() {
           onSetEditingBgGroup={setEditingBgGroup}
           onDeleteBgEdge={deleteBgEdge}
           onUpdateBgEdge={updateBgEdge}
+          bgImages={bgImages}
+          onAddBgImage={addBgImage}
+          onDeleteBgImage={deleteBgImage}
+          onUpdateBgImage={updateBgImage}
+          onRenameBgImage={renameBgImage}
+          editingBgImage={editingBgImage}
+          onSetEditingBgImage={setEditingBgImage}
           config={config}
           onConfigChange={setConfig}
           settings={settings}
@@ -1685,6 +1822,8 @@ export default function App() {
           lastAddedTypeRef={lastAddedTypeRef}
           addElemAt={addElemAt}
           onAddElemAtDone={() => setAddElemAt(null)}
+          tab={sidebarTab}
+          onTabChange={setSidebarTab}
           layers={layers}
           activeLayer={activeLayer}
           onSetActiveLayer={setActiveLayer}

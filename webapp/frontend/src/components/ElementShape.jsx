@@ -5,7 +5,7 @@ import { DEFAULT_SYMBOL_DEFS } from '../utils/symbols'
 
 // ── Symbol lookup with glob-wildcard fallback ────────────────────────────────
 // Keys in defs are tried as exact match first, then as glob patterns (* → .*)
-function lookupSymbolDef(defs, normalized) {
+export function lookupSymbolDef(defs, normalized) {
   if (defs[normalized] !== undefined) return defs[normalized]
   for (const [key, def] of Object.entries(defs)) {
     try {

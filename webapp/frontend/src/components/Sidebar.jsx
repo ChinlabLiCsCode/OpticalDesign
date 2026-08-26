@@ -24,6 +24,9 @@ export default function Sidebar({
   bgGroups, visibleBg, onToggleBg, onToggleAllBg,
   onAddBgGroup, onDeleteBgGroup, onSetBgGroupColor, onSetBgGroupStroke, onRenameBgGroup,
   editingBgGroup, onSetEditingBgGroup, onDeleteBgEdge, onUpdateBgEdge,
+  // Background images
+  bgImages, onAddBgImage, onDeleteBgImage, onUpdateBgImage, onRenameBgImage,
+  editingBgImage, onSetEditingBgImage,
   // Config + settings
   config, onConfigChange,
   settings, onSettingsChange,
@@ -37,8 +40,14 @@ export default function Sidebar({
   layers, activeLayer,
   onSetActiveLayer, onAddLayer, onDeleteLayer, onSetLayerVisible, onRenameLayer,
   sidebarWidth,
+  // Sidebar tab: optionally controlled by the parent so keyboard shortcuts
+  // (N in particular) can flip us to the Elements tab in the same update as
+  // their other state, without depending on a cross-boundary effect.
+  tab: controlledTab, onTabChange,
 }) {
-  const [tab, setTab] = useState('paths')
+  const [localTab, setLocalTab] = useState('paths')
+  const tab = controlledTab ?? localTab
+  const setTab = onTabChange ?? setLocalTab
 
   // Beam path add form
   const [addingPath, setAddingPath] = useState(false)
@@ -56,6 +65,9 @@ export default function Sidebar({
   const [renamePathVal, setRenamePathVal] = useState('')
   const [renamingBg,   setRenamingBg]   = useState(null)
   const [renameBgVal,  setRenameBgVal]  = useState('')
+  const [renamingBgImg, setRenamingBgImg] = useState(null)
+  const [renameBgImgVal, setRenameBgImgVal] = useState('')
+  const bgImageFileRef = useRef(null)
 
   // Symbol def add / rename
   const [addingSymbol,    setAddingSymbol]    = useState(false)
@@ -288,9 +300,10 @@ export default function Sidebar({
                         borderColor: isDupLabel ? '#e06c75' : undefined,
                       }}
                       placeholder="O-number" value={newElemLabel}
-                      onChange={e => setNewElemLabel(e.target.value)} onKeyDown={kd} autoFocus />
+                      onChange={e => setNewElemLabel(e.target.value)} onKeyDown={kd} />
                     <input className="snap-input add-name-input" placeholder="Type (e.g. mirror)"
-                      value={newElemType} onChange={e => setNewElemType(e.target.value)} onKeyDown={kd} />
+                      value={newElemType} onChange={e => setNewElemType(e.target.value)} onKeyDown={kd}
+                      autoFocus />
                   </div>
                   {isDupLabel && (
                     <span style={{ fontSize: 10, color: '#e06c75' }}>
@@ -509,6 +522,110 @@ export default function Sidebar({
             <p>✎ to enter draw mode</p>
             <p>Click two points to draw a line · click line to delete</p>
           </section>
+
+          {/* ── Background images ─────────────────────────────────────────── */}
+          <section className="sidebar-section">
+            <div className="sidebar-section-header">
+              <span>Background Images</span>
+              <button className="small-btn" onClick={() => bgImageFileRef.current?.click()}>+</button>
+            </div>
+
+            {/* Hidden file picker; onChange reads the file, measures the source
+                image's aspect ratio (needed so widthIn controls width and height
+                follows the original picture), and hands off to onAddBgImage. */}
+            <input ref={bgImageFileRef} type="file" accept="image/*"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = ev => {
+                  const href = ev.target.result
+                  const probe = new Image()
+                  probe.onload = () => {
+                    const aspect = probe.naturalWidth
+                      ? probe.naturalHeight / probe.naturalWidth
+                      : 1
+                    const base = file.name.replace(/\.[^.]+$/, '') || 'image'
+                    onAddBgImage(base, href, aspect)
+                  }
+                  probe.src = href
+                }
+                reader.readAsDataURL(file)
+                e.target.value = ''
+              }} />
+
+            {Object.keys(bgImages ?? {}).length === 0 && (
+              <p style={{ color: 'var(--text-muted)', fontSize: 11, margin: '4px 0' }}>
+                None yet. Click + to add a reference image.
+              </p>
+            )}
+
+            <ul className="path-list">
+              {Object.entries(bgImages ?? {}).map(([name, img]) => (
+                <li key={name} className="path-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input type="checkbox" checked={img.visible !== false}
+                      onChange={e => onUpdateBgImage(name, { visible: e.target.checked })} />
+                    <img src={img.href} alt=""
+                      style={{ width: 22, height: 22, objectFit: 'contain',
+                               background: 'var(--bg-item)', borderRadius: 2 }} />
+                    {renamingBgImg === name ? (
+                      <input className="snap-input" style={{ flex: 1 }}
+                        value={renameBgImgVal} autoFocus
+                        onChange={e => setRenameBgImgVal(e.target.value)}
+                        onBlur={() => {
+                          onRenameBgImage(name, renameBgImgVal); setRenamingBgImg(null)
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { onRenameBgImage(name, renameBgImgVal); setRenamingBgImg(null) }
+                          if (e.key === 'Escape') setRenamingBgImg(null)
+                        }} />
+                    ) : (
+                      <span style={{ flex: 1, fontSize: 11, cursor: 'pointer' }}
+                        onDoubleClick={() => { setRenamingBgImg(name); setRenameBgImgVal(name) }}>
+                        {name}
+                      </span>
+                    )}
+                    <button className={`small-btn ${editingBgImage === name ? 'active' : ''}`}
+                      title={editingBgImage === name ? 'Done editing' : 'Edit position/size on canvas'}
+                      onClick={() => onSetEditingBgImage?.(editingBgImage === name ? null : name)}>
+                      {editingBgImage === name ? '✓' : '✎'}
+                    </button>
+                    <button className="small-btn" onClick={() => onDeleteBgImage(name)}>✕</button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr',
+                                gap: 4, marginTop: 4, alignItems: 'center', fontSize: 10 }}>
+                    <span>X</span>
+                    <input className="snap-input" type="number" step="0.5"
+                      value={Number(img.x).toFixed(2)}
+                      onChange={e => onUpdateBgImage(name, { x: parseFloat(e.target.value) || 0 })} />
+                    <span>Y</span>
+                    <input className="snap-input" type="number" step="0.5"
+                      value={Number(img.y).toFixed(2)}
+                      onChange={e => onUpdateBgImage(name, { y: parseFloat(e.target.value) || 0 })} />
+                    <span>W</span>
+                    <input className="snap-input" type="number" step="0.5" min="0.1"
+                      value={Number(img.widthIn).toFixed(2)}
+                      onChange={e => {
+                        const w = parseFloat(e.target.value)
+                        if (w > 0) onUpdateBgImage(name, { widthIn: w })
+                      }} />
+                    <span>α</span>
+                    <input type="range" min="0" max="1" step="0.05"
+                      value={img.opacity ?? 1}
+                      onChange={e => onUpdateBgImage(name, { opacity: parseFloat(e.target.value) })}
+                      title={`${Math.round((img.opacity ?? 1) * 100)}%`} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {Object.keys(bgImages ?? {}).length > 0 && (
+              <p style={{ color: 'var(--text-muted)', fontSize: 10, margin: '4px 0 0' }}>
+                ✎ to edit on canvas · drag body to move, corner handle to resize
+              </p>
+            )}
+          </section>
         </>
       )}
 
@@ -546,14 +663,17 @@ export default function Sidebar({
 
           <section className="sidebar-section">
             <div className="sidebar-section-header"><span>Table Size (in)</span></div>
+            {/* Labels reflect the canvas axis each dimension controls; the
+                underlying config keys stay `table_length` / `table_width` for
+                CSV/JSON round-trip with the existing file format. */}
             <div className="setting-row">
-              <span className="setting-label">Length</span>
+              <span className="setting-label">Width (horiz)</span>
               <input className="snap-input" type="number" min="1" step="1"
                 value={config.table_length}
                 onChange={e => setConfig('table_length', e.target.value)} />
             </div>
             <div className="setting-row">
-              <span className="setting-label">Width</span>
+              <span className="setting-label">Length (vert)</span>
               <input className="snap-input" type="number" min="1" step="1"
                 value={config.table_width}
                 onChange={e => setConfig('table_width', e.target.value)} />

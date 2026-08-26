@@ -8,7 +8,8 @@ A browser-based tool for visualising and editing optical layouts on a 2D table d
 - **Elements** — add, move, rotate, and soft-delete optical elements; O-number labels and type annotations rendered on canvas
 - **Beam paths** — draw and colour-code beam paths between elements; beams sharing the same pair of elements fan out automatically so none are hidden underneath another
 - **Background objects** — overlay structural geometry (mounts, chamber ports, etc.)
-- **Optics styles** — regex-matched symbol definitions map element type strings to SVG icons; 69 built-in symbols included
+- **Background images** — place reference photos or schematic screenshots beneath the layout with adjustable position, size, and opacity
+- **Optics styles** — regex-matched symbol definitions map element type strings to SVG icons; 71 built-in symbols included
 - **Search** — Cmd/Ctrl+F highlights matching elements and centres the view
 - **Layers** — group elements onto named layers and show/hide them independently
 - **In Design toggle** — elements can be hidden from the diagram without being deleted; restored via the Elements tab
@@ -85,6 +86,7 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 - **Shift+click** an element to add/remove it from a multi-selection.
 - **Drag** a selected element to move it (in Select or Move mode).
 - **Double-click** a path, layer, or background-object name in the sidebar to rename it.
+- **Double-click** a beam edge on the canvas to enter edit mode for that path.
 
 ### O-numbers are unique
 
@@ -112,7 +114,7 @@ Each field is seeded with the value from the first selected element and starts u
 
 - **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
 - **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
-- **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group.
+- **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group. Below that, a **Background Images** section for placing reference photos or diagram screenshots as a semi-transparent layer under the design: click **+** to upload, drag on the canvas to move, and use the X/Y/W/α inputs to set exact position, width (in inches, height auto-preserves aspect), and opacity. Images ride along in project ZIP saves.
 - **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, beam-path overlap offset, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs).
 
 Drag the divider between the canvas and the sidebar to resize the sidebar.
@@ -263,3 +265,14 @@ The [`webapp/example_files/`](webapp/example_files/) directory contains a sample
 The project code and homemade symbols (`h-*.svg`) are released under the [MIT License](LICENSE).
 
 The optical component SVG symbols (`b-*`, `c-*`, `e-*`) are taken from the [Component Library](https://www.gwoptics.org/ComponentLibrary/) by Alexander Franzen, used here under the [Creative Commons Attribution-NonCommercial 3.0 Unported](https://creativecommons.org/licenses/by-nc/3.0/) license. Any use of those symbol files must comply with CC BY-NC 3.0.
+
+
+## Updating homemade symbols
+
+```
+python3 webapp/ComponentLibrary_files/strip_svg_metadata.py \
+  --fit-viewbox \
+  --sync-symbols-js webapp/frontend/src/utils/symbols.js \
+  --out-dir webapp/frontend/public/symbols \
+  webapp/ComponentLibrary_files/homemade/*.svg
+```
