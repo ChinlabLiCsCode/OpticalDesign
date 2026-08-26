@@ -1,85 +1,116 @@
 {
   "settings": {
     "snapSpacing": 0.5,
-    "showONumber": true,
+    "showONumber": false,
     "showType": false,
     "darkMode": false,
-    "showGrid": true,
     "gridLineWidth": 0.5,
     "scale": 10,
     "showCoords": true,
     "uiFontSize": 12,
-    "pdfFontSize": 4
+    "showGrid": true,
+    "pdfFontSize": 4,
+    "showAnnotation": true,
+    "beamSpacing": 1.5,
+    "showBeamArrows": true,
+    "beamArrowSize": 0.6,
+    "highlightOrphans": false
   },
   "config": {
-    "table_length": 55,
-    "table_width": 85,
+    "table_length": 21,
+    "table_width": 34,
     "origin_x": 0,
     "origin_y": 0
   },
   "symbolDefs": {
-    "*lens tube*": {
-      "href": "/symbols/h-lenstube.svg",
-      "w": 6.418,
-      "h": 23.426,
-      "displayH": 9
-    },
-    "*dump*": {
-      "href": "/symbols/b-dump.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
-    },
-    "*pd*": {
-      "href": "/symbols/e-pd1.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
+    "*coupler*": {
+      "href": "/symbols/b-coupler.svg",
+      "w": 17.754,
+      "h": 23.427,
+      "displayH": 10,
+      "orientation": 0
     },
     "*mirror*": {
       "href": "/symbols/b-mir.svg",
-      "w": 11,
-      "h": 11,
+      "w": 10.671,
+      "h": 29.096,
       "displayH": 11
     },
     "*pbs*": {
       "href": "/symbols/b-bsp.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 5
+      "w": 23.427,
+      "h": 23.427,
+      "displayH": 6
     },
     "*waveplate*": {
       "href": "/symbols/b-wpyel.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
+      "w": 5,
+      "h": 23.428,
+      "displayH": 9
     },
     "*hwp*": {
       "href": "/symbols/b-wpyel.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
+      "w": 5,
+      "h": 23.428,
+      "displayH": 9
     },
     "*qwp*": {
       "href": "/symbols/b-wpred.svg",
+      "w": 5.002,
+      "h": 23.428,
+      "displayH": 9
+    },
+    "*lens*": {
+      "href": "/symbols/b-lens1.svg",
+      "w": 6.418,
+      "h": 23.426,
+      "displayH": 9
+    },
+    "*pd*": {
+      "href": "/symbols/e-pd1.svg",
+      "w": 16.34,
+      "h": 23.428,
+      "displayH": 8
+    },
+    "*laser*": {
+      "href": "/symbols/c-laser1.svg",
+      "w": 12,
+      "h": 12,
+      "displayH": 24,
+      "labelClearance": 10
+    },
+    "*dump*": {
+      "href": "/symbols/b-dump.svg",
+      "w": 20,
+      "h": 20,
+      "displayH": 20
+    },
+    "*aom*": {
+      "href": "/symbols/c-aom.svg",
+      "w": 15,
+      "h": 15,
+      "displayH": 15,
+      "labelClearance": 8.5
+    },
+    "*polarizer*": {
+      "href": "/symbols/b-bspcube.svg",
       "w": 11,
       "h": 11,
       "displayH": 11
     },
-    "*lens": {
-      "href": "/symbols/b-lens1.svg",
-      "w": 9,
-      "h": 9,
-      "displayH": 9
-    },
-    "*fiber*": {
-      "href": "/symbols/b-coupler.svg",
+    "*isolator*": {
+      "href": "/symbols/c-isolator.svg",
       "w": 11,
       "h": 11,
-      "displayH": 11,
-      "orientation": 180
+      "displayH": 11
     },
-    "*window*": {
+    "*cell*": {
+      "href": "/symbols/b-crystalcc.svg",
+      "w": 11,
+      "h": 11,
+      "displayH": 11
+    },
+    "*sampler*": {
       "href": "/symbols/b-bspcube.svg",
       "w": 11,
       "h": 11,
@@ -92,40 +123,39 @@
       "displayH": 11
     },
     "*shutter*": {
-      "href": "/symbols/h-iris.svg",
+      "href": "/symbols/h-shutter.svg",
       "w": 11,
       "h": 11,
-      "displayH": 11
+      "displayH": 11,
+      "orientation": -90
     },
-    "*beam sampler*": {
-      "href": "/symbols/b-bspcube.svg",
+    "*fiber*": {
+      "href": "/symbols/c-fiber.svg",
       "w": 11,
       "h": 11,
-      "displayH": 11
+      "displayH": 14,
+      "labelClearance": 7
     },
-    "*dichroic*": {
-      "href": "/symbols/b-dicgrn.svg",
+    "*eom*": {
+      "href": "/symbols/c-eom2.svg",
       "w": 11,
       "h": 11,
       "displayH": 11
-    },
-    "dichroic mirror": {
-      "href": "/symbols/b-dicgrn.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
-    },
-    "*port*": {
-      "href": "/symbols/b-bspcube.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
-    },
-    "*camera*": {
-      "href": "/symbols/e-wincam.svg",
-      "w": 11,
-      "h": 11,
-      "displayH": 11
+    }
+  },
+  "layers": {
+    "Default": true
+  },
+  "activeLayer": "Default",
+  "bgImages": {
+    "LiTableJacob": {
+      "href": "/background_images/litablejacob.png",
+      "x": 0,
+      "y": 0.5,
+      "widthIn": 25.269880302600672,
+      "aspect": 1.142056074766355,
+      "opacity": 0.15,
+      "visible": false
     }
   }
 }

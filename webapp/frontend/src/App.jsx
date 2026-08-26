@@ -143,6 +143,9 @@ export default function App() {
     showCoords:    true,
     uiFontSize:    12,
     pdfFontSize:   4,
+    showBeamArrows:   false,
+    beamArrowSize:    1,
+    highlightOrphans: false,
   })
 
   const [searchOpen,  setSearchOpen]  = useState(false)
@@ -1676,6 +1679,11 @@ export default function App() {
                 <button className="file-menu-item" onClick={() => { setViewModal('elements'); setViewMenuOpen(false) }}>Elements</button>
                 <button className="file-menu-item" onClick={() => { setViewModal('paths'); setViewMenuOpen(false) }}>Beam Paths</button>
                 <button className="file-menu-item" onClick={() => { setViewModal('objects'); setViewMenuOpen(false) }}>Background Objects</button>
+                <div className="file-menu-sep" />
+                <button className="file-menu-item"
+                  onClick={() => setSettings(prev => ({ ...prev, highlightOrphans: !prev.highlightOrphans }))}>
+                  {settings.highlightOrphans ? '✓ ' : '  '}Highlight orphaned elements
+                </button>
               </div>
             )}
           </div>

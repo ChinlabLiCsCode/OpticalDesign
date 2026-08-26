@@ -720,6 +720,20 @@ export default function Sidebar({
             <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0' }}>
               Perpendicular gap between beams sharing the same two elements. 0 = no offset.
             </p>
+            <label className="setting-toggle" style={{ marginTop: 6 }}>
+              <input type="checkbox" checked={settings.showBeamArrows ?? false}
+                onChange={e => set('showBeamArrows', e.target.checked)} />
+              <span>Show direction arrows</span>
+            </label>
+            {settings.showBeamArrows && (
+              <div className="setting-row">
+                <span className="setting-label">Arrow size</span>
+                <input className="snap-input" type="number" min="0.1" max="20" step="0.25"
+                  value={settings.beamArrowSize ?? 1}
+                  onChange={e => setNum('beamArrowSize', e.target.value)} />
+                <span className="setting-unit">×</span>
+              </div>
+            )}
           </section>
 
           <section className="sidebar-section">
@@ -1150,6 +1164,13 @@ function SymbolRow({ type, def, editing, renaming, renameVal, onRenameValChange,
               value={def.orientation ?? 0}
               onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onUpdate({ orientation: v }) }} />
             <span className="setting-unit">°</span>
+          </div>
+          <div className="setting-row">
+            <span className="setting-label">Label clearance</span>
+            <input className="snap-input" type="number" step="0.5"
+              value={def.labelClearance ?? 6}
+              onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onUpdate({ labelClearance: v }) }} />
+            <span className="setting-unit">px</span>
           </div>
         </div>
       )}

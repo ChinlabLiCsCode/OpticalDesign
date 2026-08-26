@@ -115,7 +115,7 @@ Each field is seeded with the value from the first selected element and starts u
 - **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
 - **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
 - **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group. Below that, a **Background Images** section for placing reference photos or diagram screenshots as a semi-transparent layer under the design: click **+** to upload, drag on the canvas to move, and use the X/Y/W/α inputs to set exact position, width (in inches, height auto-preserves aspect), and opacity. Images ride along in project ZIP saves.
-- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, beam-path overlap offset, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs).
+- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, beam-path overlap offset, beam direction arrows, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs, per-style label clearance for icons whose label would otherwise overlap the drawing).
 
 Drag the divider between the canvas and the sidebar to resize the sidebar.
 
@@ -126,6 +126,8 @@ Drag the divider between the canvas and the sidebar to resize the sidebar.
 ### Viewing and editing raw data
 
 **View ▾** in the header opens a spreadsheet-style modal for Elements, Beam Paths, or Background Objects. Click a cell to edit it inline, add/delete rows, and (for Elements) add or rename custom columns by double-clicking a header. `Tab` commits a cell and moves to the next column; `Escape` cancels an in-progress edit, or closes the modal if nothing is being edited.
+
+**View ▾ → Highlight orphaned elements** is a toggle: elements that appear in at least one beam path fade back, and elements that don't are ringed in orange — useful for finding elements you forgot to wire into a beam or that got left behind after a rewire.
 
 ### Uploading and downloading files
 

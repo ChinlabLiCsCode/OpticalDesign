@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react'
-import ElementShape from './ElementShape'
+import ElementShape, { lookupSymbolDef } from './ElementShape'
 import { exportSVGToPDF } from '../utils/pdfExport'
 
 const PAD = 2
@@ -408,6 +408,16 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     const m = {}; elements.forEach(el => { m[el.label] = el }); return m
   }, [elements])
 
+  // Element labels that appear as source or destination in ANY beam path
+  // (regardless of visibility). Used by the "highlight orphans" view mode.
+  const inPathLabels = useMemo(() => {
+    const s = new Set()
+    Object.values(beamPaths).forEach(({ edges = [] }) => {
+      edges.forEach(([src, dest]) => { s.add(src); s.add(dest) })
+    })
+    return s
+  }, [beamPaths])
+
   // ── Parallel beam fan-out ─────────────────────────────────────────────────
   // Beams sharing the same pair of elements would otherwise draw exactly on top of
   // one another. Group them by the unordered pair and give each a perpendicular
@@ -637,6 +647,19 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             <line x1={x1} y1={y1} x2={x2} y2={y2}
               stroke={color} strokeWidth={isEditing ? 2 : 1}
               strokeOpacity={opacity} strokeLinecap="round" />
+            {settings.showBeamArrows && (() => {
+              const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+              const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI
+              const s = settings.beamArrowSize ?? 1
+              return (
+                <polygon
+                  points="4,0 -3,-2.4 -3,2.4"
+                  transform={`translate(${mx},${my}) rotate(${angle}) scale(${s})`}
+                  fill={color} fillOpacity={opacity}
+                  style={{ pointerEvents: 'none' }}
+                />
+              )
+            })()}
             {isEditing ? (
               <line x1={x1} y1={y1} x2={x2} y2={y2}
                 stroke="transparent" strokeWidth={12}
@@ -712,13 +735,22 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             const elCursor  = (editingPath || editingBgGroup) ? 'crosshair'
               : isSel ? (mode === 'move' ? 'grab' : mode === 'rotate' ? 'crosshair' : 'pointer')
               : 'pointer'
+            const isOrphan  = settings.highlightOrphans && !inPathLabels.has(el.label)
+            const dimmed    = settings.highlightOrphans && inPathLabels.has(el.label)
             return (
               <g key={el.label}
                 transform={`translate(${px(el.x)},${py(el.y)})`}
                 onMouseDown={e => onElementMouseDown(e, el)}
-                style={{ cursor: elCursor }}
+                style={{ cursor: elCursor, opacity: dimmed ? 0.25 : 1 }}
               >
                 <ElementShape type={el.type} orientation={el.orientation} selected={isSel} symbolDefs={symbolDefs} dark={settings.darkMode} />
+                {isOrphan && (
+                  <circle r={11} fill="none" stroke="#ff6b35"
+                    strokeWidth={Math.max(1.5, 2 / transform.k)}
+                    strokeDasharray="3 2" opacity={0.9}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
                 {searchHighlights?.has(el.label) && (
                   <circle r={9} fill="none" stroke="#ffd700"
                     strokeWidth={Math.max(1, 1.5 / transform.k)} opacity={0.9} />
@@ -733,7 +765,9 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                     settings.showType      ? el.type       : null,
                     settings.showAnnotation ? el.Annotation : null,
                   ].filter(Boolean)
-                  const labelY   = Math.min(-6, -8 / transform.k)
+                  const def = lookupSymbolDef(symbolDefs, (el.type || '').toLowerCase().trim())
+                  const clearance = def?.labelClearance ?? 6
+                  const labelY   = Math.min(-clearance, -8 / transform.k)
                   const fontSize = Math.max(3, 8 / transform.k)
                   return parts.map((text, i) => (
                     <text key={i} x={0} y={labelY - i * fontSize * 1.2}
