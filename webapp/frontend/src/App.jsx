@@ -128,10 +128,7 @@ export default function App() {
   const [editingBgGroup, setEditingBgGroup] = useState(null)
   const [editingBgImage, setEditingBgImage] = useState(null)
 
-  // Merge stored symbolDefs OVER defaults so new entries added to
-  // DEFAULT_SYMBOL_DEFS in code propagate to existing projects; per-key
-  // user overrides in storage still win.
-  const [symbolDefs, setSymbolDefs] = useState(() => ({ ...DEFAULT_SYMBOL_DEFS, ...(_ls?.symbolDefs || {}) }))
+  const [symbolDefs, setSymbolDefs] = useState(() => _ls?.symbolDefs ?? { ...DEFAULT_SYMBOL_DEFS })
 
   const [settings, setSettings] = useState(() => _ls?.settings ?? {
     snapSpacing:      0.5,
@@ -580,7 +577,7 @@ export default function App() {
     if (s.bgImages     != null) setBgImages(s.bgImages)
     if (s.settings     != null) setSettings(prev => ({ ...prev, ...s.settings }))
     if (s.config       != null) setConfig(s.config)
-    if (s.symbolDefs   != null) setSymbolDefs({ ...DEFAULT_SYMBOL_DEFS, ...s.symbolDefs })
+    if (s.symbolDefs   != null) setSymbolDefs(s.symbolDefs)
     if (s.sidebarWidth != null) setSidebarWidth(s.sidebarWidth)
     if (s.layers       != null) setLayers(s.layers)
     if (s.activeLayer  != null) setActiveLayer(s.activeLayer)
@@ -812,7 +809,7 @@ export default function App() {
         const { settings: s, config: c, symbolDefs: sd } = JSON.parse(e.target.result)
         if (s)  setSettings(prev => ({ ...prev, ...s }))
         if (c)  setConfig(c)
-        if (sd) setSymbolDefs({ ...DEFAULT_SYMBOL_DEFS, ...sd })
+        if (sd) setSymbolDefs(sd)
       } catch (err) { setError('Invalid settings file: ' + err.message) }
     }
     reader.readAsText(file)
@@ -959,7 +956,7 @@ export default function App() {
         if (l)  newLayers = l
         if (al) newActiveLayer = al
         if (sd) {
-          newSymbolDefs = { ...DEFAULT_SYMBOL_DEFS }
+          newSymbolDefs = {}
           for (const [type, def] of Object.entries(sd)) {
             newSymbolDefs[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
           }
@@ -1059,7 +1056,7 @@ export default function App() {
       if (l)  setLayers(l)
       if (al) setActiveLayer(al)
       if (sd) {
-        const resolved = { ...DEFAULT_SYMBOL_DEFS }
+        const resolved = {}
         for (const [type, def] of Object.entries(sd)) {
           resolved[type] = customSvgMap[def.href] ? { ...def, href: customSvgMap[def.href] } : def
         }

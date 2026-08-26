@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react'
-import ElementShape, { lookupSymbolDef } from './ElementShape'
+import ElementShape from './ElementShape'
 import { exportSVGToPDF } from '../utils/pdfExport'
 
 const PAD = 2
@@ -733,16 +733,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                     settings.showType      ? el.type       : null,
                     settings.showAnnotation ? el.Annotation : null,
                   ].filter(Boolean)
-                  // Clear the element's rotated bounding box so labels
-                  // don't overlap large icons — accounts for orientation
-                  // so a wide-and-short icon isn't pushed unnecessarily
-                  // far at neutral rotation.
-                  const def = lookupSymbolDef(symbolDefs, (el.type || '').toLowerCase().trim())
-                  const dH = def?.displayH ?? 0
-                  const dW = def ? (def.w / def.h) * dH : 0
-                  const rad = ((el.orientation ?? 0) + (def?.orientation ?? 0)) * Math.PI / 180
-                  const halfHRot = 0.5 * (Math.abs(dW * Math.sin(rad)) + Math.abs(dH * Math.cos(rad)))
-                  const labelY   = Math.min(-6, -8 / transform.k, -(halfHRot + 1.5))
+                  const labelY   = Math.min(-6, -8 / transform.k)
                   const fontSize = Math.max(3, 8 / transform.k)
                   return parts.map((text, i) => (
                     <text key={i} x={0} y={labelY - i * fontSize * 1.2}
