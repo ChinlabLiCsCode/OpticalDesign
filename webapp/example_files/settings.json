@@ -14,7 +14,8 @@
     "beamSpacing": 1.5,
     "showBeamArrows": true,
     "beamArrowSize": 0.6,
-    "highlightOrphans": false
+    "highlightOrphans": false,
+    "showBoundingBox": true
   },
   "config": {
     "table_length": 21,
@@ -89,8 +90,8 @@
       "href": "/symbols/c-aom.svg",
       "w": 15,
       "h": 15,
-      "displayH": 15,
-      "labelClearance": 8.5
+      "displayH": 13,
+      "labelClearance": 7.5
     },
     "*polarizer*": {
       "href": "/symbols/b-bspcube.svg",
@@ -127,7 +128,7 @@
       "w": 11,
       "h": 11,
       "displayH": 11,
-      "orientation": -90
+      "orientation": 0
     },
     "*fiber*": {
       "href": "/symbols/c-fiber.svg",
@@ -141,21 +142,12 @@
       "w": 11,
       "h": 11,
       "displayH": 11
-    }
-  },
-  "layers": {
-    "Default": true
-  },
-  "activeLayer": "Default",
-  "bgImages": {
-    "LiTableJacob": {
-      "href": "/background_images/litablejacob.png",
-      "x": 0,
-      "y": 0.5,
-      "widthIn": 25.269880302600672,
-      "aspect": 1.142056074766355,
-      "opacity": 0.15,
-      "visible": false
+    },
+    "d-mirror": {
+      "href": "/symbols/b-mir.svg",
+      "w": 7,
+      "h": 7,
+      "displayH": 7
     }
   }
 }
