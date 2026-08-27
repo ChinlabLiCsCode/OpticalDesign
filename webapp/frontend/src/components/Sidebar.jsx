@@ -701,6 +701,16 @@ export default function Sidebar({
                 onChange={e => set('showGrid', e.target.checked)} />
               <span>Show grid</span>
             </label>
+            <label className="setting-toggle">
+              <input type="checkbox" checked={settings.showBoundingBox !== false}
+                onChange={e => set('showBoundingBox', e.target.checked)} />
+              <span>Show table bounding box</span>
+            </label>
+            <label className="setting-toggle">
+              <input type="checkbox" checked={settings.showCoords ?? false}
+                onChange={e => set('showCoords', e.target.checked)} />
+              <span>Show axis labels</span>
+            </label>
             <div className="setting-row" style={{ marginTop: 4 }}>
               <span className="setting-label">Line width</span>
               <input className="snap-input" type="number" min="0.1" max="5" step="0.1"
@@ -779,15 +789,6 @@ export default function Sidebar({
           </section>
 
           <section className="sidebar-section">
-            <div className="sidebar-section-header"><span>Coordinates</span></div>
-            <label className="setting-toggle">
-              <input type="checkbox" checked={settings.showCoords ?? false}
-                onChange={e => set('showCoords', e.target.checked)} />
-              <span>Show axis labels</span>
-            </label>
-          </section>
-
-          <section className="sidebar-section">
             <div className="sidebar-section-header"><span>PDF Export</span></div>
             <div className="setting-row">
               <span className="setting-label">Font size</span>
@@ -796,6 +797,16 @@ export default function Sidebar({
                 onChange={e => setNum('pdfFontSize', e.target.value)} />
               <span className="setting-unit">pt</span>
             </div>
+            <div className="setting-row">
+              <span className="setting-label">Label Y offset</span>
+              <input className="snap-input" type="number" step="0.5"
+                value={settings.pdfLabelYOffset ?? 0}
+                onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) set('pdfLabelYOffset', v) }} />
+              <span className="setting-unit">px</span>
+            </div>
+            <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Positive = labels pulled down toward icons. Use if PDF labels feel farther from icons than on-canvas.
+            </p>
           </section>
 
           {/* Optics Styles */}

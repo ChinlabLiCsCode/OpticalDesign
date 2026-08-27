@@ -17,6 +17,50 @@ function prefixIds(el, prefix) {
   for (const child of el.children) prefixIds(child, prefix)
 }
 
+// Inkscape emits gradients whose stops live on a base <linearGradient> and are
+// pulled in by referencing gradients via xlink:href="#base". svg2pdf.js does not
+// resolve that inheritance, so the referencing gradient reads as empty and its
+// filled shapes render as background colour. Copy stops from the referenced
+// gradient into each stop-less child so every gradient carries its own stops.
+function flattenGradientInheritance(root) {
+  const grads = root.querySelectorAll('linearGradient, radialGradient')
+  const byId = {}
+  grads.forEach(g => { const id = g.getAttribute('id'); if (id) byId[id] = g })
+  grads.forEach(g => {
+    if (g.querySelector(':scope > stop')) return
+    const ref = g.getAttribute('xlink:href') || g.getAttribute('href')
+    if (!ref || !ref.startsWith('#')) return
+    const src = byId[ref.slice(1)]
+    if (!src) return
+    src.querySelectorAll(':scope > stop').forEach(stop => g.appendChild(stop.cloneNode(true)))
+    g.removeAttribute('xlink:href')
+    g.removeAttribute('href')
+  })
+}
+
+// svg2pdf reads presentation attributes as DOM attributes, not from inline `style=""`.
+// Inkscape (and Illustrator) emit properties like fill:url(#gradient), stroke, opacity
+// inside style, which then render blank in PDF. Promote every recognised presentation
+// property to its own attribute, leaving the style intact (browsers still honour it).
+const PRESENTATION_PROPS = [
+  'fill', 'fill-opacity', 'fill-rule',
+  'stroke', 'stroke-width', 'stroke-opacity',
+  'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray',
+  'stroke-miterlimit', 'stroke-dashoffset',
+  'opacity', 'display', 'visibility',
+]
+function promoteStylesToAttrs(el) {
+  const style = el.getAttribute && el.getAttribute('style')
+  if (style) {
+    for (const prop of PRESENTATION_PROPS) {
+      if (el.hasAttribute(prop)) continue
+      const m = style.match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`))
+      if (m) el.setAttribute(prop, m[1].trim())
+    }
+  }
+  for (const child of el.children) promoteStylesToAttrs(child)
+}
+
 // Strip comment/text nodes — svg2pdf crashes on non-Element nodes (.tagName.toLowerCase()).
 // Preserve text nodes only inside <text>/<tspan>/<style> (label content + font CSS).
 function stripNonElements(el) {
@@ -53,6 +97,8 @@ async function inlineSVGImages(rootEl) {
           if (color)   stop.setAttribute('stop-color',   color)
           if (opacity) stop.setAttribute('stop-opacity', opacity)
         })
+        promoteStylesToAttrs(svg)
+        flattenGradientInheritance(svg)
         cache[abs] = svg
       } catch { return }
     }
@@ -118,7 +164,7 @@ async function triggerSave(blob, name, mime, ext) {
   URL.revokeObjectURL(url)
 }
 
-export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSize = 4) {
+export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSize = 4, projectName = null, labelYOffset = 0) {
   // Start fetching the PDF libraries now so the download overlaps with the symbol
   // inlining below (which does its own network fetches); awaited just before use.
   const libs = Promise.all([import('jspdf'), import('svg2pdf.js')])
@@ -148,15 +194,24 @@ export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSi
 
   // Normalise zoom-relative text sizes and offsets.
   // React stores fontSize as inline CSS (element.style.fontSize), not as a DOM attribute,
-  // so getAttribute('font-size') returns null. We set a fixed intrinsic size directly
-  // and remove any inline style override so svg2pdf sees a consistent value.
-  // Negative y-offsets are element labels sitting above their symbol; they were
-  // computed as -N/zoomScale so multiply by zoomScale to recover intrinsic values.
+  // so getAttribute('font-size') returns null. Set a fixed intrinsic size directly and
+  // remove the inline override so svg2pdf sees a consistent value.
+  // For element labels: the canvas `y` was computed as Math.min(-clearance, -8/k)
+  // (with a similarly zoom-varying row spacing). That doesn't unwind uniquely from
+  // the number alone, so labels are tagged with data-label-clearance and
+  // data-label-row at render time — reconstruct y directly from those.
   clone.querySelectorAll('text').forEach(t => {
     t.setAttribute('font-size', pdfFontSize)
     t.style.removeProperty('font-size')
-    const y = parseFloat(t.getAttribute('y') || '0')
-    if (y < 0) t.setAttribute('y', y * zoomScale)
+    const clearance = parseFloat(t.getAttribute('data-label-clearance'))
+    if (!isNaN(clearance)) {
+      const row = parseInt(t.getAttribute('data-label-row') || '0', 10)
+      // labelYOffset is positive to pull labels DOWN (toward icons).
+      t.setAttribute('y', -clearance + labelYOffset - row * pdfFontSize * 1.2)
+    } else {
+      const y = parseFloat(t.getAttribute('y') || '0')
+      if (y < 0) t.setAttribute('y', y * zoomScale)
+    }
   })
 
   // Temporarily mount off-screen (svg2pdf requires the element to be in the DOM)
@@ -176,5 +231,6 @@ export async function exportSVGToPDF(svgEl, svgW, svgH, zoomScale = 1, pdfFontSi
     document.body.removeChild(clone)
   }
 
-  await triggerSave(doc.output('blob'), 'optical_layout.pdf', 'application/pdf', 'pdf')
+  const safeName = (projectName || 'optical_layout').replace(/[/\\?%*:|"<>]/g, '_').trim() || 'optical_layout'
+  await triggerSave(doc.output('blob'), safeName + '.pdf', 'application/pdf', 'pdf')
 }

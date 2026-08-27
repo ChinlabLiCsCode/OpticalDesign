@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useMemo, useEffect, forwardRef, useImper
 import ElementShape, { lookupSymbolDef } from './ElementShape'
 import { exportSVGToPDF } from '../utils/pdfExport'
 
-const PAD = 2
+const PAD = 1
 
 // Fallback perpendicular gap (in SVG units) between beams sharing an element pair,
 // used when a project's settings predate the `beamSpacing` setting. Scales with zoom
@@ -288,8 +288,14 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     if (type === 'move') {
       drag.current.hasMoved = true
       const svgPos = screenToSVG(e.clientX, e.clientY)
-      const dxPhys =  (svgPos.x - drag.current.startSVG.x) / SCALE
-      const dyPhys = -(svgPos.y - drag.current.startSVG.y) / SCALE
+      let dxPhys =  (svgPos.x - drag.current.startSVG.x) / SCALE
+      let dyPhys = -(svgPos.y - drag.current.startSVG.y) / SCALE
+      // Ctrl (or Cmd) locks motion to whichever axis has the larger displacement
+      // so far — a straight-line drag along horizontal or vertical only.
+      if (e.ctrlKey || e.metaKey) {
+        if (Math.abs(dxPhys) >= Math.abs(dyPhys)) dyPhys = 0
+        else                                       dxPhys = 0
+      }
       Object.entries(drag.current.startPositions).forEach(([label, start]) => {
         let newX = start.x + dxPhys
         let newY = start.y + dyPhys
@@ -682,7 +688,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
   // ── Expose exportPDF ──────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
-    exportPDF: () => exportSVGToPDF(svgRef.current, svgW, svgH, transform.k, settings.pdfFontSize ?? 4),
+    exportPDF: (projectName) => exportSVGToPDF(svgRef.current, svgW, svgH, transform.k, settings.pdfFontSize ?? 4, projectName, settings.pdfLabelYOffset ?? 0),
     centerOn: (labels) => {
       const targets = elements.filter(el => labels.has(el.label))
       if (!targets.length) return
@@ -718,11 +724,13 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
           <rect x={0} y={0} width={svgW} height={svgH} fill={theme.canvasBg} />
           {settings.showGrid !== false && gridLines}
-          <rect
-            x={px(origin_x)} y={py(origin_y + table_width)}
-            width={table_length * SCALE} height={table_width * SCALE}
-            fill="none" stroke={theme.tableBorder} strokeWidth="2"
-          />
+          {settings.showBoundingBox !== false && (
+            <rect
+              x={px(origin_x)} y={py(origin_y + table_width)}
+              width={table_length * SCALE} height={table_width * SCALE}
+              fill="none" stroke={theme.tableBorder} strokeWidth="2"
+            />
+          )}
           <g>{renderCoordLabels()}</g>
           <g>{renderBgImages()}</g>
           <g>{renderBgEdges()}</g>
@@ -773,6 +781,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                     <text key={i} x={0} y={labelY - i * fontSize * 1.2}
                       textAnchor="middle" fontSize={fontSize}
                       fill={i === 0 ? theme.labelColor : theme.labelColor2}
+                      data-label-clearance={clearance} data-label-row={i}
                       style={{ pointerEvents: 'none', userSelect: 'none' }}>
                       {text}
                     </text>

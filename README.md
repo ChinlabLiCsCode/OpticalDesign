@@ -75,6 +75,7 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 | Arrow keys (Move mode) | Nudge selected element(s) by one grid step |
 | Arrow keys (Rotate mode) | Rotate selected element(s) ±45° (Right/Down = +45°, Left/Up = −45°) |
 | `Shift` (while dragging/rotating) | Disables snapping for free positioning/angle |
+| `Ctrl` / `Cmd` (while dragging) | Locks the drag to the dominant axis — pure horizontal or pure vertical motion |
 | `Shift` + click | Add/remove an element from the current selection |
 | `Shift` + drag (Box/Lasso Select) | Add the enclosed elements to the current selection instead of replacing it |
 
@@ -115,7 +116,7 @@ Each field is seeded with the value from the first selected element and starts u
 - **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
 - **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
 - **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group. Below that, a **Background Images** section for placing reference photos or diagram screenshots as a semi-transparent layer under the design: click **+** to upload, drag on the canvas to move, and use the X/Y/W/α inputs to set exact position, width (in inches, height auto-preserves aspect), and opacity. Images ride along in project ZIP saves.
-- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display, beam-path overlap offset, beam direction arrows, move-snap spacing, element label toggles (O-number, type, annotation), coordinate axis labels, PDF export font size, and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs, per-style label clearance for icons whose label would otherwise overlap the drawing).
+- **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display (grid lines, table bounding box, coordinate axis labels, line width), beam-path overlap offset, beam direction arrows, move-snap spacing, element label toggles (O-number, type, annotation), PDF export font size and label Y offset (nudges labels closer to icons at export time if the smaller PDF font makes them feel too far), and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs, per-style label clearance for icons whose label would otherwise overlap the drawing).
 
 Drag the divider between the canvas and the sidebar to resize the sidebar.
 
@@ -137,7 +138,7 @@ Drag the divider between the canvas and the sidebar to resize the sidebar.
 - **Download** — the matching per-file downloads, plus `Download Project` (also bound to `Cmd/Ctrl+S`) which exports everything as a `.zip`.
 - **Projects** — `New Project…` clears the workspace; `Switch Project…` lists and loads named project slots saved in the browser (localStorage); `Rename Project…` renames the current slot in place; `Save Project As…` duplicates the current files into a new, separately-named slot and switches to it, leaving the original slot untouched.
 
-**Export PDF**, a button in the header rather than a menu item, renders the current layout to a vector PDF.
+**Export PDF**, a button in the header rather than a menu item, renders the current layout to a vector PDF. The suggested filename defaults to the current project name.
 
 #### Merging uploads into an existing project
 

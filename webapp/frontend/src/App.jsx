@@ -143,6 +143,7 @@ export default function App() {
     showCoords:    true,
     uiFontSize:    12,
     pdfFontSize:   4,
+    pdfLabelYOffset: 0,
     showBeamArrows:   false,
     beamArrowSize:    1,
     highlightOrphans: false,
@@ -1352,7 +1353,7 @@ export default function App() {
   }
 
   async function handleExportPDF() {
-    try { await canvasRef.current?.exportPDF() }
+    try { await canvasRef.current?.exportPDF(currentProjectName) }
     catch (e) { setError('PDF export failed: ' + e.message) }
   }
 

@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="7.6019011mm"
-   height="1.1480328mm"
-   viewBox="0 0 7.6019011 1.1480328"
+   width="1.7264875mm"
+   height="7.9506798mm"
+   viewBox="0 0 1.7264875 7.95068"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
@@ -25,49 +25,41 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="4.6230731"
-     inkscape:cx="-39.367753"
-     inkscape:cy="-31.688878"
-     inkscape:window-width="1920"
-     inkscape:window-height="1022"
-     inkscape:window-x="1512"
-     inkscape:window-y="30"
+     inkscape:zoom="11.601228"
+     inkscape:cx="-6.2924373"
+     inkscape:cy="18.273928"
+     inkscape:window-width="1512"
+     inkscape:window-height="921"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
      inkscape:window-maximized="1"
      inkscape:current-layer="layer1"
      showgrid="false" />
   <defs
      id="defs1">
     <linearGradient
-       id="linearGradient20"
+       id="linearGradient6"
        inkscape:collect="always">
       <stop
-         style="stop-color:#d0d0d0;stop-opacity:1;"
-         offset="0"
-         id="stop18" />
-      <stop
-         style="stop-color:#000000;stop-opacity:1;"
-         offset="0.079078"
-         id="stop19" />
-      <stop
-         style="stop-color:#d0d0d0;stop-opacity:1;"
-         offset="1"
-         id="stop20" />
-    </linearGradient>
-    <linearGradient
-       id="linearGradient7"
-       inkscape:collect="always">
-      <stop
-         style="stop-color:#d0d0d0;stop-opacity:1;"
+         style="stop-color:#3d3f3f;stop-opacity:1;"
          offset="0"
          id="stop5" />
       <stop
-         style="stop-color:#000000;stop-opacity:1;"
-         offset="0.95673758"
-         id="stop6" />
-      <stop
-         style="stop-color:#d0d0d0;stop-opacity:1;"
+         style="stop-color:#d9d9d9;stop-opacity:1;"
          offset="1"
-         id="stop7" />
+         id="stop6" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient1"
+       inkscape:collect="always">
+      <stop
+         style="stop-color:#3d3d3d;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+      <stop
+         style="stop-color:#d9d9d9;stop-opacity:1;"
+         offset="1"
+         id="stop2" />
     </linearGradient>
     <linearGradient
        id="XMLID_3_"
@@ -213,9 +205,60 @@
          offset="1"
          style="stop-color:#89A4B6" />
     </linearGradient>
+    <linearGradient
+       id="linearGradient4"
+       gradientUnits="userSpaceOnUse"
+       x1="330.4668"
+       y1="34.8228"
+       x2="364.5545"
+       y2="22.892099"
+       gradientTransform="matrix(0.30139395,0,0,0.17140738,-100.4216,21.675777)">
+				<stop
+   offset="0"
+   style="stop-color:#FFFFFF"
+   id="stop3" />
+
+				<stop
+   offset="1"
+   style="stop-color:#646464;stop-opacity:1;"
+   id="stop4-0" />
+
+				<a:midPointStop
+   offset="0"
+   style="stop-color:#FFFFFF" />
+
+				<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+				<a:midPointStop
+   offset="1"
+   style="stop-color:#89A4B6" />
+
+			</linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient1"
+       id="linearGradient3"
+       x1="68.838638"
+       y1="158.74361"
+       x2="68.838638"
+       y2="157.0258"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(0.37063246,0.52916663)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient6"
+       id="linearGradient5"
+       gradientUnits="userSpaceOnUse"
+       x1="68.838638"
+       y1="158.74362"
+       x2="68.838638"
+       y2="157.02579"
+       gradientTransform="rotate(180,69.022165,155.98442)" />
     <marker
        style="overflow:visible"
-       id="ConcaveTriangle-2"
+       id="ConcaveTriangle-2-6"
        refX="0"
        refY="0"
        orient="auto-start-reverse"
@@ -230,51 +273,52 @@
       <path
          d="M -1.4,-2.8 6.3,0 -1.4,2.8 C 0,1.169 0,-1.162 -1.4,-2.8 Z"
          style="fill:context-stroke;fill-rule:evenodd;stroke:none;stroke-width:0.7"
-         id="path7-7" />
+         id="path7-7-0" />
     </marker>
-    <linearGradient
+    <marker
+       style="overflow:visible"
+       id="ConcaveTriangle-2-6-7"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Concave triangle arrow"
+       markerWidth="0.5"
+       markerHeight="0.5"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
        inkscape:collect="always"
-       xlink:href="#linearGradient7"
-       id="linearGradient1"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0.23915427,0,0,0.95051844,51.624462,25.582105)"
-       x1="61.492386"
-       y1="136.2756"
-       x2="68.770012"
-       y2="136.2756" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient20"
-       id="linearGradient2"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0.23915427,0,0,0.95051844,57.284588,25.582107)"
-       x1="61.492386"
-       y1="136.2756"
-       x2="68.770012"
-       y2="136.2756" />
+       preserveAspectRatio="xMidYMid"
+       markerUnits="strokeWidth">
+      <path
+         d="M -1.4,-2.8 6.3,0 -1.4,2.8 C 0,1.169 0,-1.162 -1.4,-2.8 Z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none;stroke-width:0.7"
+         id="path7-7-0-8" />
+    </marker>
   </defs>
   <g
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-66.229975,-154.54056)">
-    <rect
-       style="fill:url(#linearGradient1);stroke:#000000;stroke-width:0.264583;stroke-dasharray:none;stroke-opacity:1"
-       id="rect1-6-9"
-       width="1.6772"
-       height="0.88344979"
-       x="66.362267"
-       y="154.67285" />
-    <rect
-       style="fill:url(#linearGradient2);stroke:#000000;stroke-width:0.264583;stroke-dasharray:none;stroke-opacity:1"
-       id="rect1-6-7-0"
-       width="1.6772"
-       height="0.88344979"
-       x="72.022385"
-       y="154.67285" />
+     transform="translate(-68.341891,-152.23614)">
     <path
-       style="fill:none;stroke:#797979;stroke-width:0.223274;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#ConcaveTriangle-2);marker-end:url(#ConcaveTriangle-2)"
-       d="m 69.039055,155.11458 h 1.983741"
-       id="path11-2" />
+       style="fill:url(#linearGradient3);stroke:#000000;stroke-width:0.265;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+       d="m 69.935879,160.05432 v -2.87452 l -0.703356,0.77142 -0.757187,-0.74028 0.0085,2.84338 z"
+       id="path1"
+       sodipodi:nodetypes="cccccc" />
+    <path
+       style="fill:url(#linearGradient5);stroke:#000000;stroke-width:0.265;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+       d="m 68.479084,152.36864 v 2.17814 l 0.726039,0.77142 0.72605,-0.72605 1.1e-5,-2.22351 z"
+       id="path1-7"
+       sodipodi:nodetypes="cccccc" />
+    <path
+       style="fill:#de8686;fill-opacity:1;stroke:#cdcdcd;stroke-width:0.223;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle-2-6)"
+       d="m 69.205135,152.57552 v 0.73615"
+       id="path11-2-9"
+       sodipodi:nodetypes="cc" />
+    <path
+       style="fill:#de8686;fill-opacity:1;stroke:#cccccc;stroke-width:0.223;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle-2-6-7)"
+       d="m 69.205135,159.83096 v -0.73615"
+       id="path11-2-9-7"
+       sodipodi:nodetypes="cc" />
   </g>
 </svg>

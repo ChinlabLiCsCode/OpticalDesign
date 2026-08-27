@@ -57,10 +57,10 @@ export const DEFAULT_SYMBOL_DEFS = {
   'photodetector':        { ...PD1, displayH: 16 },
 
   // Homemade symbols
-  'iris':           { href: '/symbols/h-iris.svg',       w: 5.62024,     h: 29.0104, displayH: 11 },
+  'iris':           { href: '/symbols/h-iris.svg',       w: 5.62024,     h: 28.9192, displayH: 11 },
   'lens tube':      { href: '/symbols/h-lenstube.svg',   w: 37.4545, h: 23.428, displayH: 9  },
   'fiber coupler':  { href: '/symbols/h-fibercoupl.svg', w: 63.463, h: 39.599, displayH: 12 },
-  'shutter':        { href: '/symbols/h-shutter.svg',    w: 7.6019, h: 1.14803,  displayH: 6  },
+  'shutter':        { href: '/symbols/h-shutter.svg',    w: 1.72649, h: 7.95068,  displayH: 6  },
 }
 
 export const AVAILABLE_SYMBOLS = [
