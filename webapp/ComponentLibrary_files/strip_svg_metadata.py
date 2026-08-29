@@ -48,8 +48,10 @@ Optional post-processing
                   For each processed file, if PATH's DEFAULT_SYMBOL_DEFS
                   contains an entry whose href matches the file's basename,
                   rewrite that entry's w and h to the new viewBox dimensions.
-                  displayH is left untouched. Requires --fit-viewbox to be
-                  meaningful.
+                  displayH is left untouched. Also appends the filename to
+                  AVAILABLE_SYMBOLS if it's not already listed, so the SVG
+                  picker in the app sees the new icon. Requires
+                  --fit-viewbox to be meaningful.
 
 Usage
 -----
@@ -248,6 +250,34 @@ def sync_symbols_js(js_path: pathlib.Path, basename: str,
     return True
 
 
+_AVAILABLE_RE = re.compile(
+    r"(export\s+const\s+AVAILABLE_SYMBOLS\s*=\s*\[)([^\]]*?)(\])",
+    re.DOTALL,
+)
+
+
+def register_in_available_symbols(js_path: pathlib.Path, basename: str) -> bool:
+    """Insert basename into AVAILABLE_SYMBOLS (sorted, 4 per line).
+    Returns True if the file was modified (i.e. it wasn't already listed)."""
+    text = js_path.read_text(encoding='utf-8')
+    m = _AVAILABLE_RE.search(text)
+    if not m:
+        return False
+    existing = re.findall(r"'([^']+\.svg)'", m.group(2))
+    if basename in existing:
+        return False
+    names = sorted(set(existing + [basename]))
+    # Wrap 4 names per line to match the existing formatting.
+    lines = []
+    for i in range(0, len(names), 4):
+        chunk = ",".join(f"'{n}'" for n in names[i:i + 4])
+        lines.append("  " + chunk + ",")
+    body = "\n" + "\n".join(lines) + "\n"
+    new_text = text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
+    js_path.write_text(new_text, encoding='utf-8')
+    return True
+
+
 def main() -> None:
     args = sys.argv[1:]
     if not args:
@@ -306,6 +336,8 @@ def main() -> None:
                 if sync_js is not None:
                     if sync_symbols_js(sync_js, p.name, w, h):
                         line += '  symbols.js synced'
+                    if register_in_available_symbols(sync_js, p.name):
+                        line += '  AVAILABLE_SYMBOLS +'
         print(line)
 
 

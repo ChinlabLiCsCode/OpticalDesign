@@ -132,20 +132,21 @@ export default function App() {
 
   const [settings, setSettings] = useState(() => _ls?.settings ?? {
     snapSpacing:      0.5,
-    showONumber:      true,
+    showONumber:      false,
     showType:         false,
-    showAnnotation:   false,
+    showAnnotation:   true,
     darkMode:         false,
-    showGrid:      true,
-    gridLineWidth: 0.5,
-    beamSpacing:   1,
-    scale:         10,
-    showCoords:    true,
-    uiFontSize:    12,
-    pdfFontSize:   4,
-    pdfLabelYOffset: 0,
-    showBeamArrows:   false,
-    beamArrowSize:    1,
+    showGrid:         true,
+    showBoundingBox:  true,
+    showCoords:       true,
+    gridLineWidth:    0.5,
+    beamSpacing:      1.5,
+    scale:            10,
+    uiFontSize:       12,
+    pdfFontSize:      4,
+    pdfLabelYOffset:  0,
+    showBeamArrows:   true,
+    beamArrowSize:    0.6,
     highlightOrphans: false,
   })
 
@@ -159,6 +160,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => _ls?.sidebarWidth ?? 280)
   const [fileMenuOpen, setFileMenuOpen] = useState(false)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const [transformMenuOpen, setTransformMenuOpen] = useState(false)
   const [viewModal,    setViewModal]    = useState(null) // 'elements' | 'paths' | 'objects'
 
   const [layers,      setLayers]      = useState(() => {
@@ -196,10 +198,12 @@ export default function App() {
   const settingsFileRef  = useRef(null)
   const zipFileRef       = useRef(null)
   const lastAddedTypeRef = useRef('')
+  const lastAddedOrientationRef = useRef(0)
   const persistTimer     = useRef(null)
   const dragCounterRef   = useRef(0)
   const fileMenuRef      = useRef(null)
   const viewMenuRef      = useRef(null)
+  const transformMenuRef = useRef(null)
 
   // Persist state to localStorage (debounced)
   useEffect(() => {
@@ -256,7 +260,9 @@ export default function App() {
 
   const allMetaKeys = useMemo(() => {
     const coreKeys = new Set(['label', 'type', 'x', 'y', 'orientation', 'in_design', 'Setup Location', 'Layer'])
-    const keys = []; const seen = new Set()
+    // Annotation is a first-class default field: always list it, even if no
+    // element has a value set, so the column shows up in every view.
+    const keys = ['Annotation']; const seen = new Set(keys)
     elements.forEach(el => Object.keys(el).forEach(k => {
       if (!coreKeys.has(k) && !seen.has(k)) { seen.add(k); keys.push(k) }
     }))
@@ -334,10 +340,28 @@ export default function App() {
         e.preventDefault()
         openBulkEdit()
       }
+      // D: quick-add a new element at the cursor reusing the previously used
+      // type — no form step. Rotation prefers the selected element when its
+      // type matches; otherwise falls back to the last-added element's rotation.
+      if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey) {
+        const type = lastAddedTypeRef.current
+        if (!type) return
+        e.preventDefault()
+        const snap = settings.snapSpacing ?? 0.5
+        const rx = Math.round(cursorPosRef.current.x / snap) * snap
+        const ry = Math.round(cursorPosRef.current.y / snap) * snap
+        const selEls = elements.filter(el => selectedLabels.has(el.label))
+        const typeLC = type.toLowerCase().trim()
+        const inheritOrient =
+          (selEls.length === 1 && (selEls[0].type ?? '').toLowerCase().trim() === typeLC)
+            ? (selEls[0].orientation ?? 0)
+            : (lastAddedOrientationRef.current ?? 0)
+        addElement({ type, x: rx, y: ry, orientation: inheritOrient })
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [history, elements, settings.snapSpacing, undo, saveProject, openBulkEdit, bulkEdit])
+  }, [history, elements, selectedLabels, addElement, settings.snapSpacing, undo, saveProject, openBulkEdit, bulkEdit])
 
   useEffect(() => {
     if (!fileMenuOpen) return
@@ -356,6 +380,15 @@ export default function App() {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [viewMenuOpen])
+
+  useEffect(() => {
+    if (!transformMenuOpen) return
+    function onDown(e) {
+      if (!transformMenuRef.current?.contains(e.target)) setTransformMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [transformMenuOpen])
 
   // ── Element edit helpers ───────────────────────────────────────────────────
   function startEdit()  { pushHistory() }
@@ -405,8 +438,9 @@ export default function App() {
       return
     }
     lastAddedTypeRef.current = type
+    lastAddedOrientationRef.current = orientation
     pushHistory()
-    const newEl = { label, type, x, y, orientation, in_design: true, Layer: activeLayer }
+    const newEl = { label, type, x, y, orientation, in_design: true, Layer: activeLayer, Annotation: '' }
     setElements(els => [...els, newEl])
     setSelectedLabels(new Set([label]))
   }
@@ -465,6 +499,120 @@ export default function App() {
   useEffect(() => {
     if (searchHighlights?.size) canvasRef.current?.centerOn(searchHighlights)
   }, [searchHighlights])
+
+  // ── Global project transforms ──────────────────────────────────────────────
+  // rotateCW / rotateCCW: rotate the whole scene ±90° around the table centre
+  //   and swap table_length ↔ table_width, keeping the (old) centre put.
+  // flipH / flipV:        mirror across the vertical / horizontal centre axis.
+  // Element orientations, background-object coords, and background-image
+  // centres+rotations+flip flags are all updated; beam paths reference labels
+  // so they follow automatically.
+  function transformProject(kind) {
+    const ox = config.origin_x ?? 0
+    const oy = config.origin_y ?? 0
+    // Rotations pivot around the table's origin corner so origin stays put.
+    // Flips still use the table centre so mirrored content lands inside the box.
+    const cx = ox + (config.table_length ?? 55) / 2
+    const cy = oy + (config.table_width  ?? 85) / 2
+    let mapPt, mapAngle, imgAngle, imgFlipDelta = { x: false, y: false }
+    let swapDims = false
+    // Coerce every input to a Number so a legacy string field can't turn
+    // arithmetic into string concatenation.
+    const N = v => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+    if (kind === 'rotateCW') {
+      mapPt = (x, y) => ({ x: ox + (N(y) - oy), y: oy - (N(x) - ox) })
+      mapAngle = a => N(a) - 90
+      // Background images use the raw SVG rotate() angle, which visually
+      // rotates opposite to the element convention. Negate so they turn the
+      // same visible direction as elements.
+      imgAngle = a => N(a) + 90
+      swapDims = true
+    } else if (kind === 'rotateCCW') {
+      mapPt = (x, y) => ({ x: ox - (N(y) - oy), y: oy + (N(x) - ox) })
+      mapAngle = a => N(a) + 90
+      imgAngle = a => N(a) - 90
+      swapDims = true
+    } else if (kind === 'flipH') {
+      mapPt = (x, y) => ({ x: 2 * cx - N(x), y: N(y) })
+      mapAngle = a => 180 - N(a)
+      // For images the rotation stays; mirror is applied via the flipX flag
+      // (scale(-1,1) after rotate in the render transform).
+      imgAngle = a => N(a)
+      imgFlipDelta = { x: true, y: false }
+    } else if (kind === 'flipV') {
+      mapPt = (x, y) => ({ x: N(x), y: 2 * cy - N(y) })
+      mapAngle = a => -N(a)
+      imgAngle = a => N(a)
+      imgFlipDelta = { x: false, y: true }
+    } else return
+
+    pushHistory()
+
+    setElements(es => es.map(el => {
+      const p = mapPt(el.x, el.y)
+      return { ...el, x: p.x, y: p.y, orientation: mapAngle(el.orientation) }
+    }))
+
+    // Overrides shadow base element fields at render time — any x, y, or
+    // orientation override must also be transformed, or the element visually
+    // ignores the rotation/flip. Rotate the effective (merged) position so
+    // the result is consistent even when the override touches only one axis,
+    // and store both x and y so the base y can't leak through post-rotation.
+    setOverrides(ovs => {
+      const out = {}
+      for (const [label, ov] of Object.entries(ovs)) {
+        const nov = { ...ov }
+        if (nov.x != null || nov.y != null) {
+          const base = elements.find(e => e.label === label)
+          const ex = nov.x != null ? nov.x : (base?.x ?? 0)
+          const ey = nov.y != null ? nov.y : (base?.y ?? 0)
+          const p = mapPt(ex, ey)
+          nov.x = p.x
+          nov.y = p.y
+        }
+        if (nov.orientation != null) nov.orientation = mapAngle(nov.orientation)
+        out[label] = nov
+      }
+      return out
+    })
+
+    setBgGroups(groups => {
+      const out = {}
+      for (const [name, g] of Object.entries(groups)) {
+        out[name] = { ...g, edges: (g.edges ?? []).map(([x1, y1, x2, y2]) => {
+          const a = mapPt(x1, y1), b = mapPt(x2, y2)
+          return [a.x, a.y, b.x, b.y]
+        }) }
+      }
+      return out
+    })
+
+    setBgImages(imgs => {
+      const out = {}
+      for (const [name, img] of Object.entries(imgs)) {
+        const h = img.widthIn * img.aspect
+        const p = mapPt(img.x + img.widthIn / 2, img.y + h / 2)
+        out[name] = {
+          ...img,
+          x: p.x - img.widthIn / 2,
+          y: p.y - h / 2,
+          rotation: imgAngle(img.rotation ?? 0),
+          flipX: imgFlipDelta.x ? !(img.flipX ?? false) : (img.flipX ?? false),
+          flipY: imgFlipDelta.y ? !(img.flipY ?? false) : (img.flipY ?? false),
+        }
+      }
+      return out
+    })
+
+    if (swapDims) {
+      setConfig(c => ({
+        ...c,
+        table_length: c.table_width,
+        table_width:  c.table_length,
+        // origin stays put — rotations pivot around it.
+      }))
+    }
+  }
 
   function startSidebarResize(e) {
     e.preventDefault()
@@ -726,7 +874,7 @@ export default function App() {
   }
 
   // ── Background image helpers ───────────────────────────────────────────────
-  // Each entry: { href: dataURL, x, y, widthIn (inches), aspect, opacity, visible }
+  // Each entry: { href: dataURL, x, y, widthIn (inches), aspect, rotation (deg), flipX, flipY, opacity, visible }
   // Height falls out of widthIn * aspect at render time, so aspect follows the
   // source file's pixels — resizing preserves the picture instead of stretching it.
   function addBgImage(name, dataURL, aspect) {
@@ -749,6 +897,9 @@ export default function App() {
         y: cy - (widthIn * aspect) / 2,
         widthIn,
         aspect,
+        rotation: 0,
+        flipX: false,
+        flipY: false,
         opacity: 0.6,
         visible: true,
       },
@@ -1685,6 +1836,20 @@ export default function App() {
                   onClick={() => setSettings(prev => ({ ...prev, highlightOrphans: !prev.highlightOrphans }))}>
                   {settings.highlightOrphans ? '✓ ' : '  '}Highlight orphaned elements
                 </button>
+              </div>
+            )}
+          </div>
+          <div className="file-menu" ref={transformMenuRef}>
+            <button className="file-btn" onClick={() => setTransformMenuOpen(o => !o)}>Transform ▾</button>
+            {transformMenuOpen && (
+              <div className="file-menu-dropdown">
+                <div className="file-menu-label">Rotate whole project</div>
+                <button className="file-menu-item" onClick={() => { transformProject('rotateCCW'); setTransformMenuOpen(false) }}>↺ Rotate 90° left</button>
+                <button className="file-menu-item" onClick={() => { transformProject('rotateCW');  setTransformMenuOpen(false) }}>↻ Rotate 90° right</button>
+                <div className="file-menu-sep" />
+                <div className="file-menu-label">Flip whole project</div>
+                <button className="file-menu-item" onClick={() => { transformProject('flipH'); setTransformMenuOpen(false) }}>↔ Flip horizontal</button>
+                <button className="file-menu-item" onClick={() => { transformProject('flipV'); setTransformMenuOpen(false) }}>↕ Flip vertical</button>
               </div>
             )}
           </div>

@@ -61,6 +61,7 @@ export const DEFAULT_SYMBOL_DEFS = {
   'lens tube':      { href: '/symbols/h-lenstube.svg',   w: 37.4545, h: 23.428, displayH: 9  },
   'fiber coupler':  { href: '/symbols/h-fibercoupl.svg', w: 63.463, h: 39.599, displayH: 12 },
   'shutter':        { href: '/symbols/h-shutter.svg',    w: 1.72649, h: 7.95068,  displayH: 6  },
+  'fabry perot':    { href: '/symbols/h-fabryperot.svg',    w: 18.1577, h: 7.69832,  displayH: 6  },
 }
 
 export const AVAILABLE_SYMBOLS = [
@@ -80,7 +81,7 @@ export const AVAILABLE_SYMBOLS = [
   'e-hvampleft.svg','e-hvampright.svg','e-lopass.svg','e-mix.svg',
   'e-pd1.svg','e-pd2.svg','e-pdgrn1.svg','e-pdgrn2.svg',
   'e-qpd.svg','e-servoleft.svg','e-servoright.svg','e-spekki.svg',
-  'e-sum.svg','e-sumdiff.svg','e-wincam.svg',
+  'e-sum.svg','e-sumdiff.svg','e-wincam.svg','h-fabryperot.svg',
   'h-fibercoupl.svg','h-iris.svg','h-lenstube.svg','h-shutter.svg',
 ]
 

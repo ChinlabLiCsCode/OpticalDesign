@@ -285,7 +285,14 @@ export default function Sidebar({
 
               function commitAdd() {
                 if (!canAdd) return
-                onAddElement({ type: newElemType.trim(), label: trimmedLabel || undefined, x: newElemX, y: newElemY })
+                const type = newElemType.trim()
+                // Inherit the last-selected element's rotation if it's the same type.
+                const inheritOrient = selectedElement
+                  && (selectedElement.type ?? '').toLowerCase().trim() === type.toLowerCase()
+                  ? (selectedElement.orientation ?? 0)
+                  : 0
+                onAddElement({ type, label: trimmedLabel || undefined,
+                  x: newElemX, y: newElemY, orientation: inheritOrient })
                 setAddingElement(false)
               }
               function kd(e) {
@@ -616,6 +623,21 @@ export default function Sidebar({
                       value={img.opacity ?? 1}
                       onChange={e => onUpdateBgImage(name, { opacity: parseFloat(e.target.value) })}
                       title={`${Math.round((img.opacity ?? 1) * 100)}%`} />
+                    <span>θ</span>
+                    <input className="snap-input" type="number" step="15"
+                      value={Number(img.rotation ?? 0).toFixed(0)}
+                      onChange={e => onUpdateBgImage(name, { rotation: parseFloat(e.target.value) || 0 })}
+                      title="Rotation (degrees, clockwise)" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4, fontSize: 10 }}>
+                    <button className={`small-btn ${img.flipX ? 'active' : ''}`}
+                      style={{ flex: 1 }}
+                      onClick={() => onUpdateBgImage(name, { flipX: !img.flipX })}
+                      title="Flip horizontally">Flip ↔</button>
+                    <button className={`small-btn ${img.flipY ? 'active' : ''}`}
+                      style={{ flex: 1 }}
+                      onClick={() => onUpdateBgImage(name, { flipY: !img.flipY })}
+                      title="Flip vertically">Flip ↕</button>
                   </div>
                 </li>
               ))}

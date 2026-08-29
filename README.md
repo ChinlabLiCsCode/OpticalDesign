@@ -67,13 +67,14 @@ Shortcuts are disabled while typing in a text field, except Cmd/Ctrl+F and Cmd/C
 | `Cmd/Ctrl+S` | Download Project (saves the current layout as a `.zip`) |
 | `Cmd/Ctrl+Z` | Undo the last change |
 | `N` | Add a new element at the last cursor position, reusing the previously used type |
+| `D` | Quick-add a new element at the cursor with the previously used type — no form step. Inherits rotation from the currently selected element if its type matches. |
 | `P` | Bulk-set properties (Layer, Type, Orientation, In Design, custom columns) on every selected element |
 | `B` / `L` / `M` / `R` | Switch to Box Select / Lasso / Move / Rotate mode |
 | `Escape` | Cancel the current action / edit mode / selection tool, one step at a time |
 | `Delete` or `Backspace` | Soft-delete selected elements (hides them, sets In Design = FALSE, keeps them in the file) |
 | `Shift+Delete` or `Shift+Backspace` | Hard-delete selected elements (removes them entirely) |
-| Arrow keys (Move mode) | Nudge selected element(s) by one grid step |
-| Arrow keys (Rotate mode) | Rotate selected element(s) ±45° (Right/Down = +45°, Left/Up = −45°) |
+| Arrow keys (Select or Move mode) | Nudge selected element(s) by one grid step |
+| Shift + arrow keys | Rotate selected element(s) ±45° (Right/Down = +45°, Left/Up = −45°) — also the default in Rotate mode |
 | `Shift` (while dragging/rotating) | Disables snapping for free positioning/angle |
 | `Ctrl` / `Cmd` (while dragging) | Locks the drag to the dominant axis — pure horizontal or pure vertical motion |
 | `Shift` + click | Add/remove an element from the current selection |
@@ -115,7 +116,7 @@ Each field is seeded with the value from the first selected element and starts u
 
 - **Paths** — list beam paths, toggle visibility, add/rename/delete a path, edit its edges.
 - **Elements** — add elements (by form, or press `N` at the cursor); manage layers (radio = active layer, checkbox = visibility); filter and multi-select from the full elements list; toggle In Design per element.
-- **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group. Below that, a **Background Images** section for placing reference photos or diagram screenshots as a semi-transparent layer under the design: click **+** to upload, drag on the canvas to move, and use the X/Y/W/α inputs to set exact position, width (in inches, height auto-preserves aspect), and opacity. Images ride along in project ZIP saves.
+- **Objects** — background-object groups (chamber walls, mounts, etc.), same add/rename/delete/edit-edges pattern as Paths, plus a stroke-width control per group. Below that, a **Background Images** section for placing reference photos or diagram screenshots as a semi-transparent layer under the design: click **+** to upload, drag on the canvas to move, and use the X/Y/W/α/θ inputs to set exact position, width (in inches, height auto-preserves aspect), opacity, and rotation (degrees, clockwise); Flip ↔ / Flip ↕ buttons mirror the image without changing its rotation. Images ride along in project ZIP saves.
 - **Settings** — dark mode, UI font size, canvas scale, table size/origin, grid display (grid lines, table bounding box, coordinate axis labels, line width), beam-path overlap offset, beam direction arrows, move-snap spacing, element label toggles (O-number, type, annotation), PDF export font size and label Y offset (nudges labels closer to icons at export time if the smaller PDF font makes them feel too far), and the Optics Styles symbol library editor (add/rename/delete symbol mappings, upload custom SVGs, per-style label clearance for icons whose label would otherwise overlap the drawing).
 
 Drag the divider between the canvas and the sidebar to resize the sidebar.
@@ -129,6 +130,8 @@ Drag the divider between the canvas and the sidebar to resize the sidebar.
 **View ▾** in the header opens a spreadsheet-style modal for Elements, Beam Paths, or Background Objects. Click a cell to edit it inline, add/delete rows, and (for Elements) add or rename custom columns by double-clicking a header. `Tab` commits a cell and moves to the next column; `Escape` cancels an in-progress edit, or closes the modal if nothing is being edited.
 
 **View ▾ → Highlight orphaned elements** is a toggle: elements that appear in at least one beam path fade back, and elements that don't are ringed in orange — useful for finding elements you forgot to wire into a beam or that got left behind after a rewire.
+
+**Transform ▾** applies global operations to the whole project: rotate 90° left/right (also swaps table length/width so the layout stays inside the same footprint) and flip horizontal/vertical. Each transform is one undo step.
 
 ### Uploading and downloading files
 

@@ -120,9 +120,13 @@ export function serializeElementsCsv(elements, overrides, config) {
     return { ...el, ...ov, _softDeleted: undefined }
   })
 
-  // Collect all extra keys in order (preserve order from first element seen)
+  // Collect all extra keys in order (preserve order from first element seen).
+  // Annotation is a first-class default field: always include it, even if no
+  // element has a value set, so the column round-trips through export/import.
   const extraKeys = []
   const seen = new Set()
+  const forced = ['Annotation']
+  forced.forEach(k => { seen.add(k); extraKeys.push(k) })
   rows.forEach(el => Object.keys(el).forEach(k => {
     if (!CORE_KEYS.has(k) && !seen.has(k)) { seen.add(k); extraKeys.push(k) }
   }))

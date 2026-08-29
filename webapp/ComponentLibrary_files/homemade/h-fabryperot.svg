@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="18.157734mm"
+   height="7.6983199mm"
+   viewBox="0 0 18.157734 7.6983199"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   sodipodi:docname="h-fabryperot.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:i="http://ns.adobe.com/AdobeIllustrator/10.0/"
+   xmlns:a="http://ns.adobe.com/AdobeSVGViewerExtensions/3.0/">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="4.1701077"
+     inkscape:cx="52.756431"
+     inkscape:cy="53.236035"
+     inkscape:window-width="1512"
+     inkscape:window-height="921"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <linearGradient
+       id="XMLID_2_"
+       gradientUnits="userSpaceOnUse"
+       x1="343.29099"
+       y1="43.0298"
+       x2="343.29099"
+       y2="14.6831"
+       gradientTransform="matrix(0.35,0,0,1,-115.4937,-14.3086)">
+					<stop
+   offset="0.0056"
+   style="stop-color:#89A4B6"
+   id="stop1" />
+
+					<stop
+   offset="0.5"
+   style="stop-color:#FFFFFF"
+   id="stop2" />
+
+					<stop
+   offset="1"
+   style="stop-color:#89A4B6"
+   id="stop3" />
+
+					<a:midPointStop
+   offset="0.0056"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="1"
+   style="stop-color:#89A4B6" />
+
+				</linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#XMLID_2_"
+       id="linearGradient2"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.35,0,0,1,-115.4937,-14.3086)"
+       x1="343.29099"
+       y1="43.0298"
+       x2="343.29099"
+       y2="14.6831" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#XMLID_2_"
+       id="linearGradient3"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(0.35,0,0,1,-115.4937,-14.3086)"
+       x1="343.29099"
+       y1="43.0298"
+       x2="343.29099"
+       y2="14.6831" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-935.83125,-144.65084)">
+    <g
+       id="Layer_1"
+       i:layer="yes"
+       i:dimmedPercent="50"
+       i:rgbTrio="#4F008000FFFF"
+       transform="matrix(0.26458333,0,0,0.26458333,951.17726,144.65084)">
+			<g
+   id="g3">
+				
+					<linearGradient
+   id="linearGradient6"
+   gradientUnits="userSpaceOnUse"
+   x1="343.29099"
+   y1="43.0298"
+   x2="343.29099"
+   y2="14.6831"
+   gradientTransform="matrix(0.35,0,0,1,-115.4937,-14.3086)">
+					<stop
+   offset="0.0056"
+   style="stop-color:#89A4B6"
+   id="stop4" />
+
+					<stop
+   offset="0.5"
+   style="stop-color:#FFFFFF"
+   id="stop5" />
+
+					<stop
+   offset="1"
+   style="stop-color:#89A4B6"
+   id="stop6" />
+
+					<a:midPointStop
+   offset="0.0056"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="1"
+   style="stop-color:#89A4B6" />
+
+				</linearGradient>
+
+				<path
+   i:knockout="Off"
+   fill="url(#XMLID_2_)"
+   stroke="#000000"
+   stroke-width="0.75"
+   d="M 8.836,0.375 H 0.48 c 0.764,3.046 1.27,8.254 1.27,14.172 0,5.92 -0.506,11.128 -1.27,14.174 H 8.835 V 0.375 Z"
+   id="path3"
+   style="fill:url(#linearGradient3)" />
+
+				<rect
+   x="7.4159999"
+   y="0.375"
+   i:knockout="Off"
+   stroke="#000000"
+   stroke-width="0.75"
+   width="2.836"
+   height="28.346001"
+   id="rect3" />
+ 
+			</g>
+
+		</g>
+    <g
+       id="Layer_1-7"
+       i:layer="yes"
+       i:dimmedPercent="50"
+       i:rgbTrio="#4F008000FFFF"
+       transform="matrix(-0.26458333,0,0,-0.26458333,938.64298,152.34916)">
+			<g
+   id="g3-6">
+				
+					<linearGradient
+   id="linearGradient1"
+   gradientUnits="userSpaceOnUse"
+   x1="343.29099"
+   y1="43.0298"
+   x2="343.29099"
+   y2="14.6831"
+   gradientTransform="matrix(0.35,0,0,1,-115.4937,-14.3086)">
+					<stop
+   offset="0.0056"
+   style="stop-color:#89A4B6"
+   id="stop4-2" />
+
+					<stop
+   offset="0.5"
+   style="stop-color:#FFFFFF"
+   id="stop5-7" />
+
+					<stop
+   offset="1"
+   style="stop-color:#89A4B6"
+   id="stop6-0" />
+
+					<a:midPointStop
+   offset="0.0056"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#89A4B6" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="0.5"
+   style="stop-color:#FFFFFF" />
+
+					<a:midPointStop
+   offset="1"
+   style="stop-color:#89A4B6" />
+
+				</linearGradient>
+
+				<path
+   i:knockout="Off"
+   fill="url(#XMLID_2_)"
+   stroke="#000000"
+   stroke-width="0.75"
+   d="M 8.836,0.375 H 0.48 c 0.764,3.046 1.27,8.254 1.27,14.172 0,5.92 -0.506,11.128 -1.27,14.174 H 8.835 V 0.375 Z"
+   id="path3-3"
+   style="fill:url(#linearGradient2)" />
+
+				<rect
+   x="7.4159999"
+   y="0.375"
+   i:knockout="Off"
+   stroke="#000000"
+   stroke-width="0.75"
+   width="2.836"
+   height="28.346001"
+   id="rect3-9" />
+ 
+			</g>
+
+		</g>
+    <rect
+       style="fill:none;stroke:#000000;stroke-width:0.264583;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4"
+       width="18.174973"
+       height="7.5285454"
+       x="935.82263"
+       y="144.73573" />
+  </g>
+</svg>

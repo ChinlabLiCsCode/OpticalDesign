@@ -121,7 +121,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
       if (e.key.startsWith('Arrow')) {
         e.preventDefault()
-        if (mode === 'rotate') {
+        // Rotate when in Rotate mode OR when Shift is held (works from any mode).
+        if (mode === 'rotate' || e.shiftKey) {
           const delta = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 45 : -45
           onStartEdit()
           elements.filter(el => selectedLabels.has(el.label)).forEach(el => {
@@ -510,10 +511,19 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
       const sy = py(img.y + heightIn)
       const sw = img.widthIn * SCALE
       const sh = heightIn * SCALE
+      const rotDeg = img.rotation ?? 0
+      const flipX = img.flipX ? -1 : 1
+      const flipY = img.flipY ? -1 : 1
+      const cx = sx + sw / 2, cy = sy + sh / 2
+      // Compose around image centre: scale (mirror) is applied AFTER rotate so
+      // a rotated image mirrors visually as if the underlying pixels flipped.
+      const xf = (rotDeg || flipX < 0 || flipY < 0)
+        ? `translate(${cx} ${cy}) scale(${flipX} ${flipY}) rotate(${rotDeg}) translate(${-cx} ${-cy})`
+        : undefined
       // Handle size scales inversely with zoom so it stays clickable at any zoom.
       const handleR = 5 / transform.k
       return (
-        <g key={`bgimg-${name}`}>
+        <g key={`bgimg-${name}`} transform={xf}>
           <image
             href={img.href}
             x={sx} y={sy} width={sw} height={sh}
@@ -588,11 +598,13 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     const yStep = table_width  <= 15 ? 1 : 5
 
     const tableLeft   = px(origin_x)
+    const tableRight  = px(origin_x + table_length)
     const tableBottom = py(origin_y)
+    const tableTop    = py(origin_y + table_width)
     const labelOffX   = fontSize * 1.2
     const labelOffY   = fontSize * 1.4
 
-    // X-axis: labels below the bottom table edge
+    // X-axis: labels below AND above the table
     const xStart = Math.ceil(origin_x / xStep) * xStep
     const xEnd   = Math.floor((origin_x + table_length) / xStep) * xStep
     for (let x = xStart; x <= xEnd; x += xStep) {
@@ -605,11 +617,17 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             textAnchor="middle" fontSize={fontSize} fill={theme.labelColor2}>
             {x}
           </text>
+          <line x1={sx} y1={tableTop} x2={sx} y2={tableTop - tickLen}
+            stroke={theme.labelColor2} strokeWidth={0.5 / transform.k} />
+          <text x={sx} y={tableTop - labelOffY * 0.5}
+            textAnchor="middle" fontSize={fontSize} fill={theme.labelColor2}>
+            {x}
+          </text>
         </g>
       )
     }
 
-    // Y-axis: labels to the left of the left table edge
+    // Y-axis: labels to the left AND right of the table
     const yStart = Math.ceil(origin_y / yStep) * yStep
     const yEnd   = Math.floor((origin_y + table_width) / yStep) * yStep
     for (let y = yStart; y <= yEnd; y += yStep) {
@@ -620,6 +638,12 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
             stroke={theme.labelColor2} strokeWidth={0.5 / transform.k} />
           <text x={tableLeft - labelOffX} y={sy}
             textAnchor="end" dominantBaseline="middle" fontSize={fontSize} fill={theme.labelColor2}>
+            {y}
+          </text>
+          <line x1={tableRight} y1={sy} x2={tableRight + tickLen} y2={sy}
+            stroke={theme.labelColor2} strokeWidth={0.5 / transform.k} />
+          <text x={tableRight + labelOffX} y={sy}
+            textAnchor="start" dominantBaseline="middle" fontSize={fontSize} fill={theme.labelColor2}>
             {y}
           </text>
         </g>
