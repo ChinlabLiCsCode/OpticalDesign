@@ -47,7 +47,7 @@ The canvas toolbar (bottom-left) switches between modes. The current mode determ
 Two additional modes are entered from the sidebar rather than the toolbar:
 
 - **Beam-path edit** — click the ✎ next to a path in the **Paths** tab. Click a source element, then a destination element, to add an edge between them; clicking an existing edge deletes it. Click the pending source again to cancel it. Exit with **Done** in the sidebar or `Escape`.
-- **Background-object edit** — click the ✎ next to a group in the **Objects** tab. Click two points to draw a line segment (clicking an element snaps to its position; `Shift`-click for a free point); click an existing segment to delete it. Exit with **Done** in the sidebar or `Escape`.
+- **Background-object edit** — click the ✎ next to a group in the **Objects** tab. Click two points to draw a line segment (snaps to grid; `Shift`-click for a free point); click an existing segment to delete it. Text labels: type into the **Text labels** input, then click the canvas to drop that text at the grid position (uses the group's color). Click a placed label in edit mode to delete it. Exit with **Done** in the sidebar or `Escape`.
 
 `Escape` always backs out one step at a time: it clears a pending point/edge first, then exits edit mode, then returns to Select.
 

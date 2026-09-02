@@ -20,6 +20,8 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   onSelectLabel, onStartEdit, onUpdateEdit, onDeleteSelected, onHardDeleteSelected,
   editingPath, onAddEdge, onDeleteEdge, onSetEditingPath,
   editingBgGroup, onAddBgEdge, onDeleteBgEdge, onSetEditingBgGroup,
+  onAddBgLabel, onDeleteBgLabel,
+  pendingBgLabelText, onSetPendingBgLabelText,
   bgImages, onUpdateBgImage, onStartBgImageEdit,
   editingBgImage, onSetEditingBgImage,
   symbolDefs,
@@ -99,6 +101,7 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
 
       if (e.key === 'Escape') {
         e.preventDefault()
+        if (pendingBgLabelText) { onSetPendingBgLabelText?.(null); return }
         if (pendingBgPt)    { setPendingBgPt(null); return }
         if (pendingSrc)     { setPendingSrc(null); return }
         if (editingBgGroup) { onSetEditingBgGroup(null); return }
@@ -150,21 +153,10 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
   // ── Element click / drag start ────────────────────────────────────────────
   function onElementMouseDown(e, el) {
     if (e.button !== 0) return
+    // In bg edit mode, let the click bubble to the background handler so it
+    // snaps to grid instead of the element position.
+    if (editingBgGroup) return
     e.stopPropagation()
-
-    // In bg edit mode, clicking an element snaps the bg edge point to the element's position
-    if (editingBgGroup) {
-      const { x, y } = el
-      if (!pendingBgPt) {
-        setPendingBgPt({ x, y })
-      } else if (pendingBgPt.x === x && pendingBgPt.y === y) {
-        setPendingBgPt(null)
-      } else {
-        onAddBgEdge(editingBgGroup, pendingBgPt.x, pendingBgPt.y, x, y)
-        setPendingBgPt(null)
-      }
-      return
-    }
 
     // Path edit mode: clicks build edges
     if (editingPath) {
@@ -216,6 +208,13 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     if (editingBgGroup) {
       const svgPos = screenToSVG(e.clientX, e.clientY)
       const { x, y } = svgToPhys(svgPos, settings.snapSpacing, e.shiftKey)
+      // Text-placement mode: drop the pending text as a label instead of
+      // starting/finishing an edge.
+      if (pendingBgLabelText) {
+        onAddBgLabel(editingBgGroup, x, y, pendingBgLabelText)
+        onSetPendingBgLabelText?.(null)
+        return
+      }
       if (!pendingBgPt) {
         setPendingBgPt({ x, y })
       } else {
@@ -425,6 +424,17 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
     return s
   }, [beamPaths])
 
+  // Element labels in the currently-edited beam path only. Used by the
+  // "dim non-path elements in edit mode" experimental setting.
+  const inCurrentPathLabels = useMemo(() => {
+    if (!editingPath) return null
+    const s = new Set()
+    ;(beamPaths[editingPath]?.edges ?? []).forEach(([src, dest]) => {
+      s.add(src); s.add(dest)
+    })
+    return s
+  }, [beamPaths, editingPath])
+
   // ── Parallel beam fan-out ─────────────────────────────────────────────────
   // Beams sharing the same pair of elements would otherwise draw exactly on top of
   // one another. Group them by the unordered pair and give each a perpendicular
@@ -580,6 +590,29 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
                 onClick={ev => { ev.stopPropagation(); onDeleteBgEdge(name, ei) }}
               />
             )}
+          </g>
+        )
+      })
+    })
+    // Render text labels (if any) for each visible group.
+    Object.entries(bgGroups ?? {}).forEach(([name, { color, labels = [] }]) => {
+      if (!visibleBg?.[name]) return
+      const isEditing = name === editingBgGroup
+      const opacity   = editingBgGroup && !isEditing ? 0.2 : 0.9
+      labels.forEach((lab, li) => {
+        const fontSize = lab.fontSize ?? 4
+        out.push(
+          <g key={`bg-lab-${name}-${li}`}>
+            <text x={px(lab.x)} y={py(lab.y)}
+              fill={color} fillOpacity={opacity}
+              textAnchor="middle" dominantBaseline="middle"
+              fontSize={fontSize}
+              style={{ pointerEvents: isEditing ? 'auto' : 'none',
+                       cursor: isEditing ? 'pointer' : 'default',
+                       userSelect: 'none' }}
+              onClick={isEditing ? (ev => { ev.stopPropagation(); onDeleteBgLabel(name, li) }) : undefined}>
+              {lab.text}
+            </text>
           </g>
         )
       })
@@ -768,7 +801,10 @@ const OpticalCanvas = forwardRef(function OpticalCanvas({
               : isSel ? (mode === 'move' ? 'grab' : mode === 'rotate' ? 'crosshair' : 'pointer')
               : 'pointer'
             const isOrphan  = settings.highlightOrphans && !inPathLabels.has(el.label)
-            const dimmed    = settings.highlightOrphans && inPathLabels.has(el.label)
+            const dimmedForOrphans = settings.highlightOrphans && inPathLabels.has(el.label)
+            const dimmedForBeamEdit = settings.dimNonPathInEditMode
+              && inCurrentPathLabels && !inCurrentPathLabels.has(el.label)
+            const dimmed    = dimmedForOrphans || dimmedForBeamEdit
             return (
               <g key={el.label}
                 transform={`translate(${px(el.x)},${py(el.y)})`}

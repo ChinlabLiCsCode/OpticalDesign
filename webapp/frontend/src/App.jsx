@@ -127,6 +127,9 @@ export default function App() {
   const [editingPath,    setEditingPath]    = useState(null)
   const [editingBgGroup, setEditingBgGroup] = useState(null)
   const [editingBgImage, setEditingBgImage] = useState(null)
+  // When set, the next click in bg-group edit mode places this text as a label
+  // rather than starting/finishing an edge.
+  const [pendingBgLabelText, setPendingBgLabelText] = useState(null)
 
   const [symbolDefs, setSymbolDefs] = useState(() => _ls?.symbolDefs ?? { ...DEFAULT_SYMBOL_DEFS })
 
@@ -148,6 +151,7 @@ export default function App() {
     showBeamArrows:   true,
     beamArrowSize:    0.6,
     highlightOrphans: false,
+    dimNonPathInEditMode: false,
   })
 
   const [searchOpen,  setSearchOpen]  = useState(false)
@@ -172,6 +176,13 @@ export default function App() {
   const [currentProjectId,   setCurrentProjectId]   = useState(() => loadCurrentProjectInfo()?.id   ?? null)
   const [currentProjectName, setCurrentProjectName] = useState(() => loadCurrentProjectInfo()?.name ?? null)
   const [projectsModalOpen,  setProjectsModalOpen]  = useState(false)
+  // Bumped whenever the localStorage projects dict changes (add / delete /
+  // rename), so the Switch-Project modal — which reads from localStorage
+  // directly — re-renders instead of showing a stale list.
+  const [projectsListVersion, setProjectsListVersion] = useState(0)
+  // Inline-rename state for the Switch Project modal.
+  const [renamingProjId, setRenamingProjId] = useState(null)
+  const [renameProjVal, setRenameProjVal]   = useState('')
   const [newProjPromptOpen,  setNewProjPromptOpen]  = useState(false)
   const [newProjName,        setNewProjName]        = useState('')
   const [saveAsPromptOpen,   setSaveAsPromptOpen]   = useState(false)
@@ -579,10 +590,17 @@ export default function App() {
     setBgGroups(groups => {
       const out = {}
       for (const [name, g] of Object.entries(groups)) {
-        out[name] = { ...g, edges: (g.edges ?? []).map(([x1, y1, x2, y2]) => {
-          const a = mapPt(x1, y1), b = mapPt(x2, y2)
-          return [a.x, a.y, b.x, b.y]
-        }) }
+        out[name] = {
+          ...g,
+          edges: (g.edges ?? []).map(([x1, y1, x2, y2]) => {
+            const a = mapPt(x1, y1), b = mapPt(x2, y2)
+            return [a.x, a.y, b.x, b.y]
+          }),
+          labels: (g.labels ?? []).map(l => {
+            const p = mapPt(l.x, l.y)
+            return { ...l, x: p.x, y: p.y }
+          }),
+        }
       }
       return out
     })
@@ -746,6 +764,7 @@ export default function App() {
     localStorage.setItem('optDesign_current_project', JSON.stringify({ id: pid, name: trimmed }))
     setCurrentProjectId(pid)
     setCurrentProjectName(trimmed)
+    setProjectsListVersion(v => v + 1)
   }
 
   function openProjectById(id) {
@@ -759,6 +778,21 @@ export default function App() {
     setProjectsModalOpen(false)
   }
 
+  function renameProjectById(id, newName) {
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    const projects = loadSavedProjects()
+    if (!projects[id]) return
+    if (projects[id].name === trimmed) return
+    projects[id] = { ...projects[id], name: trimmed }
+    localStorage.setItem('optDesign_projects', JSON.stringify(projects))
+    if (currentProjectId === id) {
+      localStorage.setItem('optDesign_current_project', JSON.stringify({ id, name: trimmed }))
+      setCurrentProjectName(trimmed)
+    }
+    setProjectsListVersion(v => v + 1)
+  }
+
   function deleteProjectById(id) {
     const projects = loadSavedProjects()
     delete projects[id]
@@ -768,6 +802,7 @@ export default function App() {
       setCurrentProjectId(null)
       setCurrentProjectName(null)
     }
+    setProjectsListVersion(v => v + 1)
   }
 
   function startNewProject(name) {
@@ -870,6 +905,37 @@ export default function App() {
         patch.x1 ?? e[0], patch.y1 ?? e[1], patch.x2 ?? e[2], patch.y2 ?? e[3],
       ] : e)
       return { ...g, [groupName]: { ...grp, edges } }
+    })
+  }
+
+  // Text labels attached to a bg group. Each entry: { x, y, text, fontSize? }.
+  function addBgLabel(groupName, x, y, text) {
+    if (!text?.trim()) return
+    pushHistory()
+    setBgGroups(g => {
+      const grp = g[groupName]
+      if (!grp) return g
+      const labels = [...(grp.labels ?? []), { x, y, text: text.trim() }]
+      return { ...g, [groupName]: { ...grp, labels } }
+    })
+  }
+
+  function deleteBgLabel(groupName, idx) {
+    pushHistory()
+    setBgGroups(g => {
+      const grp = g[groupName]
+      if (!grp?.labels) return g
+      return { ...g, [groupName]: { ...grp, labels: grp.labels.filter((_, i) => i !== idx) } }
+    })
+  }
+
+  function updateBgLabel(groupName, idx, patch) {
+    pushHistory()
+    setBgGroups(g => {
+      const grp = g[groupName]
+      if (!grp?.labels) return g
+      const labels = grp.labels.map((l, i) => i === idx ? { ...l, ...patch } : l)
+      return { ...g, [groupName]: { ...grp, labels } }
     })
   }
 
@@ -1920,6 +1986,10 @@ export default function App() {
           editingBgGroup={editingBgGroup}
           onAddBgEdge={addBgEdge}
           onDeleteBgEdge={deleteBgEdge}
+          onAddBgLabel={addBgLabel}
+          onDeleteBgLabel={deleteBgLabel}
+          pendingBgLabelText={pendingBgLabelText}
+          onSetPendingBgLabelText={setPendingBgLabelText}
           onSetEditingBgGroup={setEditingBgGroup}
           bgImages={bgImages}
           onUpdateBgImage={updateBgImage}
@@ -1971,6 +2041,11 @@ export default function App() {
           onSetEditingBgGroup={setEditingBgGroup}
           onDeleteBgEdge={deleteBgEdge}
           onUpdateBgEdge={updateBgEdge}
+          onAddBgLabel={addBgLabel}
+          onDeleteBgLabel={deleteBgLabel}
+          onUpdateBgLabel={updateBgLabel}
+          pendingBgLabelText={pendingBgLabelText}
+          onSetPendingBgLabelText={setPendingBgLabelText}
           bgImages={bgImages}
           onAddBgImage={addBgImage}
           onDeleteBgImage={deleteBgImage}
@@ -2103,16 +2178,42 @@ export default function App() {
                 ? <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: '8px 0' }}>No saved projects.</p>
                 : (
                   <ul className="project-list">
-                    {entries.map(([id, proj]) => (
+                    {entries.map(([id, proj]) => {
+                      const isRenaming = renamingProjId === id
+                      const commitRename = () => {
+                        renameProjectById(id, renameProjVal)
+                        setRenamingProjId(null)
+                      }
+                      return (
                       <li key={id} className={`project-item ${id === currentProjectId ? 'project-item-current' : ''}`}>
-                        <button className="project-item-name" onClick={() => openProjectById(id)}>
-                          <span className="project-item-label">{proj.name}</span>
-                          <span className="project-item-date">{new Date(proj.savedAt).toLocaleString()}</span>
-                        </button>
+                        {isRenaming ? (
+                          <div className="project-item-name" style={{ display: 'flex', alignItems: 'center' }}>
+                            <input className="snap-input" style={{ flex: 1 }}
+                              value={renameProjVal}
+                              autoFocus
+                              onChange={e => setRenameProjVal(e.target.value)}
+                              onBlur={commitRename}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') commitRename()
+                                if (e.key === 'Escape') setRenamingProjId(null)
+                              }} />
+                          </div>
+                        ) : (
+                          <button className="project-item-name"
+                            onClick={() => openProjectById(id)}
+                            onDoubleClick={e => { e.stopPropagation(); setRenamingProjId(id); setRenameProjVal(proj.name) }}
+                            title="Click to open · double-click to rename">
+                            <span className="project-item-label">{proj.name}</span>
+                            <span className="project-item-date">{new Date(proj.savedAt).toLocaleString()}</span>
+                          </button>
+                        )}
+                        <button className="small-btn" title="Rename"
+                          onClick={() => { setRenamingProjId(id); setRenameProjVal(proj.name) }}>✎</button>
                         <button className="small-btn project-item-del" title="Delete"
                           onClick={() => deleteProjectById(id)}>✕</button>
                       </li>
-                    ))}
+                      )
+                    })}
                   </ul>
                 )
               }

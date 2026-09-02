@@ -131,8 +131,9 @@
 .edge-empty { color: var(--text-faint); font-size: 0.917em; font-style: italic; padding: 2px 4px; }
 
 /* ── Bg object edge editor ── */
-.bg-edge-item { flex-direction: column; align-items: stretch; gap: 2px; padding: 4px; }
-.bg-edge-item .edge-delete { align-self: flex-end; margin-top: -2px; }
+.bg-edge-item { flex-direction: row; align-items: flex-end; gap: 4px; padding: 4px; }
+.bg-edge-item .bg-coord-row { flex: 1; align-items: flex-end; }
+.bg-edge-item .edge-delete { flex-shrink: 0; align-self: center; padding-bottom: 2px; }
 
 .bg-coord-row { display: flex; align-items: center; gap: 3px; flex-wrap: nowrap; }
 .coord-arrow { color: var(--text-muted); font-size: 0.833em; flex-shrink: 0; }

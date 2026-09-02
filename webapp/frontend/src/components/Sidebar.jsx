@@ -24,6 +24,8 @@ export default function Sidebar({
   bgGroups, visibleBg, onToggleBg, onToggleAllBg,
   onAddBgGroup, onDeleteBgGroup, onSetBgGroupColor, onSetBgGroupStroke, onRenameBgGroup,
   editingBgGroup, onSetEditingBgGroup, onDeleteBgEdge, onUpdateBgEdge,
+  onAddBgLabel, onDeleteBgLabel, onUpdateBgLabel,
+  pendingBgLabelText, onSetPendingBgLabelText,
   // Background images
   bgImages, onAddBgImage, onDeleteBgImage, onUpdateBgImage, onRenameBgImage,
   editingBgImage, onSetEditingBgImage,
@@ -522,6 +524,40 @@ export default function Sidebar({
                   <li className="edge-empty">No edges yet</li>
                 )}
               </ul>
+
+              {/* Text labels */}
+              <div style={{ marginTop: 8, borderTop: '1px solid var(--border-side)', paddingTop: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Text labels</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input className="snap-input" style={{ flex: 1 }}
+                    placeholder="type text, then Place"
+                    value={pendingBgLabelText ?? ''}
+                    onChange={e => onSetPendingBgLabelText?.(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') onSetPendingBgLabelText?.(null) }} />
+                  <button className="small-btn"
+                    disabled={!pendingBgLabelText?.trim()}
+                    title="Arm placement: next canvas click drops the text">
+                    {pendingBgLabelText?.trim() ? '↳ click canvas' : 'Place'}
+                  </button>
+                </div>
+                <ul className="edge-list" style={{ marginTop: 4 }}>
+                  {(bgGroups[editingBgGroup].labels ?? []).map((lab, i) => (
+                    <li key={i} className="edge-item bg-edge-item">
+                      <div className="bg-coord-row">
+                        <div className="coord-field" style={{ flex: 1, minWidth: 60 }}>
+                          <span className="coord-label">text</span>
+                          <input className="coord-input" style={{ width: '100%', textAlign: 'left' }}
+                            value={lab.text}
+                            onChange={e => onUpdateBgLabel(editingBgGroup, i, { text: e.target.value })} />
+                        </div>
+                        <CoordInput label="x" val={lab.x} onChange={v => onUpdateBgLabel(editingBgGroup, i, { x: v })} />
+                        <CoordInput label="y" val={lab.y} onChange={v => onUpdateBgLabel(editingBgGroup, i, { y: v })} />
+                      </div>
+                      <button className="edge-delete" onClick={() => onDeleteBgLabel(editingBgGroup, i)}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </section>
           )}
 
@@ -756,6 +792,11 @@ export default function Sidebar({
               <input type="checkbox" checked={settings.showBeamArrows ?? false}
                 onChange={e => set('showBeamArrows', e.target.checked)} />
               <span>Show direction arrows</span>
+            </label>
+            <label className="setting-toggle">
+              <input type="checkbox" checked={settings.dimNonPathInEditMode ?? false}
+                onChange={e => set('dimNonPathInEditMode', e.target.checked)} />
+              <span>Dim other elements in edit mode</span>
             </label>
             {settings.showBeamArrows && (
               <div className="setting-row">
