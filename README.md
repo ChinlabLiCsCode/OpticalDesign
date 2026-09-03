@@ -17,18 +17,32 @@ A browser-based tool for visualising and editing optical layouts on a 2D table d
 - **Export** — vector PDF export; individual CSV/JSON downloads; full project ZIP
 - **Projects** — multiple named projects saved in the browser, switchable at any time
 - **Persistence** — layout state is saved to localStorage automatically
+- **Cloud projects (optional)** — log in with an account to save/load that account's projects from the cloud, from any computer
 
 ## Using online
 
 The app is hosted at [opticaldesigner.netlify.app](https://opticaldesigner.netlify.app) — no install required, just open it in a browser.
 
-There is no server-side storage: your layout lives entirely in that browser's **localStorage**, scoped to that domain. This means:
+By default there is no server-side storage: your layout lives entirely in that browser's **localStorage**, scoped to that domain. This means:
 
 - Work persists automatically across page reloads and browser restarts, but only on the same browser/device you were using.
 - Clearing site data/cookies for the domain, using a different browser, or going incognito will lose unsaved work.
 - Nothing is uploaded anywhere — files never leave your machine unless you explicitly export/save them.
 
 Use **File ▾ → Download Project** (or `Cmd/Ctrl+S`) to export your layout to a `.zip` whenever you want a durable, shareable copy outside the browser.
+
+### Cloud projects (optional)
+
+If the deployment has cloud storage configured (see [Cloud setup](#cloud-setup-optional) below), a **Log in** button appears in the header and the File ▾ menu gains a **Cloud** section:
+
+- **Log in to use Cloud Projects…** — opens a sign-in/sign-up form (email + password).
+- **Open Cloud Project…** — lists the projects saved to the cloud under the account you're logged in as, with when each was last saved. Click one to load it.
+- **Save to Cloud…** — saves the current layout as a *new* cloud project under this account.
+- **Save to Cloud (update)** — appears once a cloud project is open; saves changes back to it. If the same account saved it from elsewhere since you loaded it (e.g. someone else using the same shared login, or you in another tab), you'll be warned and asked to overwrite, reload the other version, or cancel — the cloud store doesn't merge concurrent edits.
+
+Cloud projects are **private to the account that created them** — Row Level Security on the backend means one account can never see or edit another account's cloud projects, even though every account uses the same public sign-up form. This is entirely additive: local projects, localStorage persistence, and CSV/JSON/ZIP import-export all keep working exactly the same whether or not you're logged in, and a deployment without cloud storage configured simply doesn't show the Log in button or Cloud menu.
+
+**To give a whole lab/team access to the same set of cloud projects**, don't create individual accounts — create one account and share those login credentials with everyone who should have access. Anyone with the credentials sees and edits that one account's project list; nobody else (including a stranger who signs up their own separate account on the public form) can see it. This also means you don't strictly need to disable public sign-up for data-privacy reasons — an uninvited signup just gets their own empty, useless project list — though you may still want to disable it under Supabase's Authentication → Settings to keep the user table tidy.
 
 ## User guide
 
@@ -214,7 +228,7 @@ Stores canvas settings, table config, and optics style definitions. Optics style
 
 ## Local development
 
-The app is a static single-page React app (Vite + React 19) — there's no backend or database to stand up, and everything runs in the browser against local files/localStorage.
+The app is a static single-page React app (Vite + React 19). There's no backend to stand up for local/offline use — everything runs in the browser against local files/localStorage. Cloud projects are an optional add-on backed by [Supabase](https://supabase.com); see [Cloud setup (optional)](#cloud-setup-optional) below. Without it configured, the app behaves exactly as before.
 
 ### Prerequisites
 
@@ -257,6 +271,80 @@ npm run lint
 ```
 
 Runs ESLint over the `src/` tree.
+
+## Cloud setup (optional)
+
+Cloud projects (per-account save/load, see [Cloud projects](#cloud-projects-optional) above) run on [Supabase](https://supabase.com) — a hosted Postgres database, auth, and file storage. The frontend talks to it directly from the browser; no server code is needed, so the app stays a static Netlify deploy either way.
+
+1. Create a Supabase project and note its **Project URL** and **anon public key** (Project Settings → API). The anon key is meant to be exposed client-side — access control comes from the Row Level Security policies below, not from keeping the key secret.
+
+   On the project-creation "Security" screen: leave **Enable Data API** checked (required — it's what `supabase-js` talks to). **Automatically expose new tables** and **Enable automatic RLS** can be left at Supabase's recommended values (off) — the SQL below grants API access and enables RLS explicitly either way, so neither project-wide setting is load-bearing here.
+2. In the Supabase SQL Editor, run:
+
+   ```sql
+   create table public.cloud_projects (
+     id               uuid primary key,
+     name             text not null,
+     state            jsonb not null,
+     created_at       timestamptz not null default now(),
+     updated_at       timestamptz not null default now(),
+     created_by       uuid references auth.users(id),
+     created_by_email text,
+     updated_by       uuid references auth.users(id),
+     updated_by_email text
+   );
+
+   alter table public.cloud_projects enable row level security;
+
+   -- Base table privileges for the API roles. Needed explicitly if your project
+   -- has "Automatically expose new tables" turned off (Project Settings →
+   -- API → Security) — RLS policies alone don't grant access; RLS only
+   -- restricts access that a role already has. Harmless to run even if that
+   -- setting is on.
+   grant select, insert, update, delete on public.cloud_projects to authenticated;
+
+   -- Owner-scoped: an account can only see/change its own rows. `with check`
+   -- on insert/update stops a client from writing a row claiming a different
+   -- owner than its own auth.uid().
+   create policy "owner select" on public.cloud_projects
+     for select to authenticated using (created_by = auth.uid());
+   create policy "owner insert" on public.cloud_projects
+     for insert to authenticated with check (created_by = auth.uid());
+   create policy "owner update" on public.cloud_projects
+     for update to authenticated using (created_by = auth.uid()) with check (created_by = auth.uid());
+   create policy "owner delete" on public.cloud_projects
+     for delete to authenticated using (created_by = auth.uid());
+
+   create or replace function public.set_updated_at()
+   returns trigger language plpgsql as $$
+   begin
+     new.updated_at = now();
+     return new;
+   end;
+   $$;
+   create trigger cloud_projects_set_updated_at
+     before update on public.cloud_projects
+     for each row execute function public.set_updated_at();
+
+   insert into storage.buckets (id, name, public) values ('project-images', 'project-images', false);
+
+   -- storage.objects.owner is set automatically by Supabase Storage to the
+   -- uploader's auth.uid(), so background images get the same per-account
+   -- scoping with no path restructuring needed.
+   create policy "owner read project images" on storage.objects
+     for select to authenticated using (bucket_id = 'project-images' and owner = auth.uid());
+   create policy "owner write project images" on storage.objects
+     for insert to authenticated with check (bucket_id = 'project-images' and owner = auth.uid());
+   create policy "owner update project images" on storage.objects
+     for update to authenticated using (bucket_id = 'project-images' and owner = auth.uid());
+   create policy "owner delete project images" on storage.objects
+     for delete to authenticated using (bucket_id = 'project-images' and owner = auth.uid());
+   ```
+
+   Each account can only read and write its own rows and images — see [Cloud projects](#cloud-projects-optional) above for how a team shares one pool of projects anyway (share one account's login).
+3. Under Authentication → Providers, confirm Email is enabled (it is by default). Optionally, under Authentication → Settings, disable "Confirm email" so people can sign up without a confirmation round-trip, and/or disable "Allow new users to sign up" entirely once you've created whatever account(s) you need — neither is required for data privacy (see above), just tidiness.
+4. Copy `webapp/frontend/.env.example` to `webapp/frontend/.env.local` and fill in `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` for local dev.
+5. For the deployed site, add the same two variables in Netlify under Site configuration → Environment variables, then trigger a redeploy (env vars only take effect on the next build, not retroactively).
 
 ## Deployment
 

@@ -3,12 +3,18 @@ import JSZip from 'jszip'
 import OpticalCanvas from './components/OpticalCanvas'
 import Sidebar from './components/Sidebar'
 import SpreadsheetModal from './components/SpreadsheetModal'
+import AuthPanel from './components/AuthPanel'
+import CloudProjectsModal from './components/CloudProjectsModal'
 import { DEFAULT_SYMBOL_DEFS } from './utils/symbols'
 import {
   parseElementsCsv, serializeElementsCsv,
   parseBeamPathsCsv, serializeBeamPathsCsv,
   parseBgObjectsCsv, serializeBgObjectsCsv,
 } from './utils/csvUtils'
+import { supabase } from './supabaseClient'
+import {
+  fetchCloudProject, insertCloudProject, updateCloudProject, getCloudProjectUpdatedAt,
+} from './utils/cloudProjects'
 import './App.css'
 
 const DEFAULT_CONFIG = { table_length: 55, table_width: 85, origin_x: 0, origin_y: 0 }
@@ -189,6 +195,19 @@ export default function App() {
   const [saveAsProjName,     setSaveAsProjName]     = useState('')
   const [dupProjPromptOpen,  setDupProjPromptOpen]  = useState(false)
   const [dupProjName,        setDupProjName]        = useState('')
+
+  // ── Cloud projects — optional, only active when Supabase is configured. Each
+  // account's cloud projects are private to it (owner-scoped RLS); a team
+  // that wants a shared pool logs everyone into the same account.
+  const [session,                 setSession]                 = useState(null)
+  const [authModalOpen,           setAuthModalOpen]           = useState(false)
+  const [cloudProjectsModalOpen,  setCloudProjectsModalOpen]  = useState(false)
+  const [currentCloudProject,     setCurrentCloudProject]     = useState(null) // {id, name, updatedAt}
+  const [cloudBusy,               setCloudBusy]               = useState(false)
+  const [cloudError,              setCloudError]              = useState(null)
+  const [cloudConflict,           setCloudConflict]           = useState(null) // {updatedByEmail, updatedAt}
+  const [saveToCloudPromptOpen,   setSaveToCloudPromptOpen]   = useState(false)
+  const [saveToCloudName,         setSaveToCloudName]         = useState('')
   const [uploadConflict,     setUploadConflict]     = useState(null) // { kind: 'elements'|'paths'|'objects', parsed, parsedCfg }
   const [labelCollisionPrompt, setLabelCollisionPrompt] = useState(null) // { parsed, parsedCfg, count }
   const [manualRelabel,        setManualRelabel]        = useState(null) // { parsed, parsedCfg, resolvedLabels, queue, step, usedLabels, value }
@@ -233,6 +252,16 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = settings.darkMode ? 'dark' : 'light'
   }, [settings.darkMode])
+
+  // Track the logged-in Supabase user, if any. When Supabase isn't
+  // configured (`supabase` is null), this is a no-op and every cloud UI
+  // element stays hidden — see the header/File-menu render below.
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => setSession(sess))
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
   // ── Derived state ──────────────────────────────────────────────────────────
   // All elements with overrides merged — used for the sidebar list (includes hidden)
@@ -764,6 +793,7 @@ export default function App() {
     localStorage.setItem('optDesign_current_project', JSON.stringify({ id: pid, name: trimmed }))
     setCurrentProjectId(pid)
     setCurrentProjectName(trimmed)
+    setCurrentCloudProject(null)
     setProjectsListVersion(v => v + 1)
   }
 
@@ -775,6 +805,7 @@ export default function App() {
     localStorage.setItem('optDesign_current_project', JSON.stringify({ id, name: project.name }))
     setCurrentProjectId(id)
     setCurrentProjectName(project.name)
+    setCurrentCloudProject(null)
     setProjectsModalOpen(false)
   }
 
@@ -817,8 +848,75 @@ export default function App() {
     localStorage.removeItem('optDesign_current_project')
     setCurrentProjectId(null)
     setCurrentProjectName(trimmed)
+    setCurrentCloudProject(null)
     setNewProjPromptOpen(false)
     setNewProjName('')
+  }
+
+  // ── Cloud project helpers ──────────────────────────────────────────────────
+  // Mirror the local-slot helpers above, routed through Supabase instead of
+  // localStorage. A project is either a local slot, a cloud project, or
+  // neither — opening/starting one clears the other's identity, same as the
+  // local helpers already do for each other.
+  async function openCloudProjectById(id) {
+    setCloudError(null)
+    const proj = await fetchCloudProject(id)
+    applyProjectState(proj.state)
+    localStorage.removeItem('optDesign_current_project')
+    setCurrentProjectId(null)
+    setCurrentProjectName(null)
+    setCurrentCloudProject({ id: proj.id, name: proj.name, updatedAt: proj.updatedAt })
+    setCloudProjectsModalOpen(false)
+  }
+
+  async function saveNewCloudProject(name) {
+    if (!session) return
+    setCloudBusy(true); setCloudError(null)
+    try {
+      const saved = await insertCloudProject(name, captureProjectState(), session.user)
+      setCurrentProjectId(null)
+      setCurrentProjectName(null)
+      localStorage.removeItem('optDesign_current_project')
+      setCurrentCloudProject(saved)
+      setSaveToCloudPromptOpen(false)
+      setSaveToCloudName('')
+    } catch (e) {
+      setCloudError(e.message)
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  // Updates the currently-open cloud project, unless someone else saved it
+  // since it was loaded — in which case a conflict prompt is shown instead
+  // (see cloudConflict state) and the write is held until the user decides.
+  async function updateCurrentCloudProject(force = false) {
+    if (!session || !currentCloudProject) return
+    setCloudBusy(true); setCloudError(null)
+    try {
+      if (!force) {
+        const latest = await getCloudProjectUpdatedAt(currentCloudProject.id)
+        if (latest.updatedAt !== currentCloudProject.updatedAt) {
+          setCloudConflict(latest)
+          return
+        }
+      }
+      const saved = await updateCloudProject(
+        currentCloudProject.id, currentCloudProject.name, captureProjectState(), session.user
+      )
+      setCurrentCloudProject(saved)
+      setCloudConflict(null)
+    } catch (e) {
+      setCloudError(e.message)
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  async function logOutCloud() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    setCurrentCloudProject(null)
   }
 
   function renameBeamPath(oldName, newName) {
@@ -1862,8 +1960,19 @@ export default function App() {
       <header className="app-header">
         <span className="app-title">👁️ Optical Table Designer</span>
         {currentProjectName && <span className="project-name-badge">{currentProjectName}</span>}
+        {currentCloudProject && <span className="project-name-badge">☁ {currentCloudProject.name}</span>}
         <div className="header-controls">
           <a className="file-btn" href="https://github.com/ChinlabLiCsCode/OpticalDesign" target="_blank" rel="noreferrer">GitHub</a>
+          {supabase && (
+            session ? (
+              <>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{session.user.email}</span>
+                <button className="file-btn" onClick={logOutCloud}>Log out</button>
+              </>
+            ) : (
+              <button className="file-btn" onClick={() => setAuthModalOpen(true)}>Log in</button>
+            )
+          )}
           <div className="file-menu" ref={fileMenuRef}>
             <button className="file-btn" onClick={() => setFileMenuOpen(o => !o)}>File ▾</button>
             {fileMenuOpen && (
@@ -1887,6 +1996,24 @@ export default function App() {
                 <button className="file-menu-item" onClick={() => { setProjectsModalOpen(true); setFileMenuOpen(false) }}>Switch Project…</button>
                 <button className="file-menu-item" onClick={() => { setSaveAsProjName(currentProjectName ?? ''); setSaveAsPromptOpen(true); setFileMenuOpen(false) }}>Rename Project…</button>
                 <button className="file-menu-item" onClick={() => { setDupProjName(currentProjectName ? `${currentProjectName} copy` : ''); setDupProjPromptOpen(true); setFileMenuOpen(false) }}>Save Project As…</button>
+                {supabase && (
+                  <>
+                    <div className="file-menu-sep" />
+                    <div className="file-menu-label">Cloud</div>
+                    {!session ? (
+                      <button className="file-menu-item" onClick={() => { setAuthModalOpen(true); setFileMenuOpen(false) }}>Log in to use Cloud Projects…</button>
+                    ) : (
+                      <>
+                        <button className="file-menu-item" onClick={() => { setCloudError(null); setCloudProjectsModalOpen(true); setFileMenuOpen(false) }}>Open Cloud Project…</button>
+                        <button className="file-menu-item" onClick={() => { setSaveToCloudName(currentCloudProject?.name ?? currentProjectName ?? ''); setCloudError(null); setSaveToCloudPromptOpen(true); setFileMenuOpen(false) }}>Save to Cloud…</button>
+                        {currentCloudProject && (
+                          <button className="file-menu-item" disabled={cloudBusy}
+                            onClick={() => { updateCurrentCloudProject(); setFileMenuOpen(false) }}>Save to Cloud (update)</button>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1938,12 +2065,19 @@ export default function App() {
         </div>
       )}
 
+      {cloudError && (
+        <div className="gen-banner gen-banner-error">
+          <pre>{cloudError}</pre>
+          <button onClick={() => setCloudError(null)}>✕</button>
+        </div>
+      )}
+
       <div className="app-body" style={{ position: 'relative' }}>
         {searchOpen && (
           <div style={{
             position: 'absolute', top: 8, right: 8, zIndex: 200,
             display: 'flex', alignItems: 'center', gap: 6,
-            background: 'var(--bg-side)', border: '1px solid var(--border-side)',
+            background: 'var(--bg-sidebar)', border: '1px solid var(--border-side)',
             borderRadius: 5, padding: '4px 8px', boxShadow: '0 2px 8px #0004',
           }}>
             <input ref={searchInputRef}
@@ -2164,6 +2298,61 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Save to Cloud (insert new) prompt ────────────────────────────────── */}
+      {saveToCloudPromptOpen && (
+        <div className="modal-backdrop" onClick={() => !cloudBusy && setSaveToCloudPromptOpen(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Save to Cloud</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 8px' }}>
+              Creates a new cloud project saved to this account.
+            </p>
+            <input className="snap-input" style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder="Project name"
+              value={saveToCloudName}
+              onChange={e => setSaveToCloudName(e.target.value)}
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveNewCloudProject(saveToCloudName)
+                if (e.key === 'Escape') setSaveToCloudPromptOpen(false)
+              }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="small-btn" disabled={cloudBusy} onClick={() => saveNewCloudProject(saveToCloudName)}>
+                {cloudBusy ? 'Saving…' : 'Save'}
+              </button>
+              <button className="small-btn" disabled={cloudBusy} onClick={() => setSaveToCloudPromptOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cloud save conflict (someone else saved since we loaded) ────────── */}
+      {cloudConflict && (
+        <div className="modal-backdrop" onClick={() => setCloudConflict(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Cloud project changed</div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 12px' }}>
+              Updated by {cloudConflict.updatedByEmail || 'someone else'} at{' '}
+              {new Date(cloudConflict.updatedAt).toLocaleString()}, since you loaded it.
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className="small-btn" onClick={() => updateCurrentCloudProject(true)}>Overwrite their changes</button>
+              <button className="small-btn" onClick={() => { setCloudConflict(null); openCloudProjectById(currentCloudProject.id) }}>Reload their version</button>
+              <button className="small-btn" onClick={() => setCloudConflict(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {authModalOpen && <AuthPanel onClose={() => setAuthModalOpen(false)} />}
+
+      {cloudProjectsModalOpen && (
+        <CloudProjectsModal
+          currentCloudProjectId={currentCloudProject?.id ?? null}
+          onOpen={openCloudProjectById}
+          onClose={() => setCloudProjectsModalOpen(false)}
+        />
       )}
 
       {/* ── Open Project modal ───────────────────────────────────────────────── */}
